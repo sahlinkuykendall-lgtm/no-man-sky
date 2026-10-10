@@ -39,3 +39,5 @@ GitHub Actions (`.github/workflows/tests.yml`) runs the unit tests and the smoke
 - HUD buttons use `focus_mode = FOCUS_NONE` so that Space always means End Turn.
 - Full-screen container Controls over the 3D view need `mouse_filter = MOUSE_FILTER_IGNORE`, or they eat the clicks meant for space.
 - Commit the `.uid` and `.import` files Godot generates. `.godot/` is ignored.
+- Scripts run with `-s` (tests, tools) are compiled before the autoloads exist. Don't use class names whose scripts mention autoloads (anything in `game/ui/` or `game/space/`) as types there. Use `Node` plus `call()`/`get()` instead. `game/sim/` classes are fine.
+- Game balance numbers (prices, scan chances, fines, fuel prices, events) live in `game/data/goods.json`, `world.json` and `races.json`. Tune them there, not in code.

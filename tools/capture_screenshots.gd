@@ -24,29 +24,37 @@ func _run() -> void:
 	await _shot("01_main_menu")
 
 	main.call("_on_new_game", 4242, "human")
-	await _frames(20)
-	await _shot("02_system_view")
-
 	var game_state: Node = root.get_node("GameState")
 	var turn_manager: Node = root.get_node("TurnManager")
 	var galaxy: GalaxyData = game_state.galaxy
 	var ship: ShipData = galaxy.player_ship()
+	root.get_node("EventBus").selection_changed.emit("planet", ship.orbiting_planet_id)
+	await _frames(20)
+	await _shot("02_system_view")
+
+	var hud: Node = main.get_node("Game").get_child(1)
+	hud.call("_toggle_planet_screen")
+	var planet_screen: Node = hud.get("_planet_screen")
+	planet_screen.call("_submit", "buy", "minerals", 12)
+	await _frames(5)
+	await _shot("03_planet_market")
+	hud.call("_toggle_planet_screen")
+
 	var system := galaxy.get_system(ship.system_id)
 	var target := system.planets[-1] if system.planets[-1].id != ship.orbiting_planet_id else system.planets[0]
 	root.get_node("EventBus").selection_changed.emit("planet", target.id)
 	turn_manager.submit_order({"type": "move_to_planet", "planet_id": target.id})
 	await _frames(5)
-	await _shot("03_course_set")
+	await _shot("04_course_set")
 
 	for i in 3:
 		turn_manager.end_turn()
 		await create_timer(1.1).timeout
-	await _shot("04_after_three_turns")
+	await _shot("05_after_three_turns")
 
-	var hud: Node = main.get_node("Game").get_child(1)
 	hud.call("_toggle_map")
 	await _frames(5)
-	await _shot("05_galaxy_map")
+	await _shot("06_galaxy_map")
 	hud.call("_toggle_map")
 
 	var neighbour := -1
@@ -60,7 +68,7 @@ func _run() -> void:
 		turn_manager.end_turn()
 		await create_timer(0.95).timeout
 	await _frames(10)
-	await _shot("06_hyperspace")
+	await _shot("07_hyperspace")
 	quit(0)
 
 

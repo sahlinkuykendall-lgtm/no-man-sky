@@ -21,10 +21,13 @@ func submit_order(order: Dictionary) -> bool:
 	var ship := GameState.player_ship()
 	if ship == null:
 		return false
-	var error := TurnResolver.apply_order(GameState.galaxy, ship, order)
+	var events: Array[Dictionary] = []
+	var error := TurnResolver.apply_order(GameState.galaxy, ship, order, events)
 	if error != "":
 		EventBus.message_posted.emit(error, "warning")
 		return false
+	if not events.is_empty():
+		EventBus.order_events.emit(events)
 	EventBus.player_order_changed.emit()
 	return true
 
@@ -70,6 +73,6 @@ func _player_is_travelling() -> bool:
 func _has_player_event(events: Array[Dictionary]) -> bool:
 	var ship := GameState.player_ship()
 	for event in events:
-		if event.get("ship_id") == ship.id and event.get("type") != TurnResolver.EVENT_REFUELED:
+		if event.get("ship_id") == ship.id:
 			return true
 	return false

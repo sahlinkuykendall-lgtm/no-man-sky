@@ -16,6 +16,8 @@ const BASE_ORBIT_SPEED := 0.22 ## Radians/day for a planet at REFERENCE_ORBIT.
 const REFERENCE_ORBIT := 200.0
 
 const PLAYER_SHIP_NAME := "Ranger"
+const PLAYER_START_CREDITS := 2500
+const PLAYER_CARGO_CAPACITY := 60
 
 
 static func generate(galaxy_seed: int, system_count: int = DEFAULT_SYSTEM_COUNT, player_race_id: String = "human") -> GalaxyData:
@@ -129,6 +131,7 @@ static func _populate(rng: RandomNumberGenerator, planet: PlanetData, race_id: S
 	planet.government_id = GameData.pick_weighted(rng, GameData.governments()).get("id", "republic")
 	planet.tech_level = rng.randi_range(2, 8)
 	planet.population = rng.randi_range(50, 9000)
+	Economy.init_market(planet)
 
 
 static func _spawn_npc_traders(rng: RandomNumberGenerator, galaxy: GalaxyData) -> void:
@@ -143,6 +146,7 @@ static func _spawn_npc_traders(rng: RandomNumberGenerator, galaxy: GalaxyData) -
 			ship.name = "%s trader" % GameData.race(system.race_id).get("adjective", "Free")
 			ship.system_id = system.id
 			ship.speed = rng.randf_range(90.0, 140.0)
+			ship.cargo_capacity = 80
 			var home := inhabited[rng.randi_range(0, inhabited.size() - 1)]
 			ship.orbiting_planet_id = home.id
 			ship.orbit_offset = Vector2.from_angle(rng.randf() * TAU) * (home.radius + 18.0)
@@ -165,6 +169,8 @@ static func _spawn_player(galaxy: GalaxyData, player_race_id: String) -> void:
 	ship.fuel = 30.0
 	ship.fuel_max = 30.0
 	ship.jump_range = 20.0
+	ship.credits = PLAYER_START_CREDITS
+	ship.cargo_capacity = PLAYER_CARGO_CAPACITY
 	var inhabited := home.inhabited_planets()
 	var start_planet := inhabited[0] if not inhabited.is_empty() else home.planets[0]
 	ship.orbiting_planet_id = start_planet.id

@@ -54,3 +54,13 @@ static func level_color(level: String) -> Color:
 		"warning":
 			return WARNING
 	return TEXT
+
+
+## 12500 -> "12,500 cr"
+static func credits(amount: int) -> String:
+	var digits := str(absi(amount))
+	var grouped := ""
+	while digits.length() > 3:
+		grouped = "," + digits.right(3) + grouped
+		digits = digits.left(digits.length() - 3)
+	return "%s%s%s cr" % ["-" if amount < 0 else "", digits, grouped]

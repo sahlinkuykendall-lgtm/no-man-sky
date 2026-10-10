@@ -1,12 +1,14 @@
 class_name Hud
 extends CanvasLayer
 ## The in-space interface: status bar, info panel, message log, turn buttons,
-## galaxy map and pause menu.
+## galaxy map, planet (trade) screen and pause menu.
 ##
 ## Keys: Space = End Turn, Shift+Space = Auto (fly until arrival), M = galaxy map,
-## Esc = menu, F = center camera on ship.
+## L = land on the planet you orbit (trade), Esc = menu, F = center camera on ship.
 
 const MAX_LOG_LINES := 8
+## Galactic news about market events reaches you from systems this close (parsecs).
+const NEWS_RANGE := 40.0
 
 var _root: Control
 var _status_label: RichTextLabel
@@ -15,8 +17,10 @@ var _log_label: RichTextLabel
 var _log_lines: Array[String] = []
 var _end_turn_button: Button
 var _auto_button: Button
+var _land_button: Button
 var _hyperspace_label: Label
 var _galaxy_map: GalaxyMap
+var _planet_screen: PlanetScreen
 var _pause_menu: PanelContainer
 
 var _selection_kind: String = ""
@@ -35,6 +39,8 @@ func _ready() -> void:
 	_build_hyperspace_label()
 	_galaxy_map = GalaxyMap.new()
 	_root.add_child(_galaxy_map)
+	_planet_screen = PlanetScreen.new()
+	_root.add_child(_planet_screen)
 	_build_pause_menu()
 
 	EventBus.galaxy_loaded.connect(_on_galaxy_loaded)
@@ -43,6 +49,7 @@ func _ready() -> void:
 	EventBus.player_order_changed.connect(_refresh)
 	EventBus.selection_changed.connect(_on_selection_changed)
 	EventBus.message_posted.connect(_add_message)
+	EventBus.order_events.connect(_on_order_events)
 	_on_galaxy_loaded()
 
 
@@ -89,7 +96,7 @@ func _build_log() -> void:
 func _build_turn_buttons() -> void:
 	var box := HBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	box.offset_left = -470
+	box.offset_left = -600
 	box.offset_right = -10
 	box.offset_top = -56
 	box.offset_bottom = -10
@@ -97,6 +104,9 @@ func _build_turn_buttons() -> void:
 	box.alignment = BoxContainer.ALIGNMENT_END
 	box.add_theme_constant_override("separation", 8)
 	_root.add_child(box)
+	_land_button = UiStyle.make_button("Land (L)", _toggle_planet_screen, 110)
+	_land_button.tooltip_text = "Land on the planet you are orbiting to trade and refuel"
+	box.add_child(_land_button)
 	box.add_child(UiStyle.make_button("Galaxy Map (M)", _toggle_map, 130))
 	_auto_button = UiStyle.make_button("Auto ▶▶", _toggle_auto, 100)
 	_auto_button.toggle_mode = true
@@ -174,29 +184,84 @@ func _on_galaxy_loaded() -> void:
 
 
 func _on_turn_resolved(_day: int, events: Array[Dictionary]) -> void:
-	var galaxy := GameState.galaxy
 	var ship := GameState.player_ship()
 	for event in events:
-		if event.get("ship_id") != ship.id:
-			continue
-		match event["type"]:
-			TurnResolver.EVENT_ARRIVED_PLANET:
-				var planet := GameState.current_system().get_planet(event["planet_id"])
-				_add_message("Arrived at %s." % planet.name, "good")
-				_selection_kind = "planet"
-				_selection_id = planet.id
-				EventBus.selection_changed.emit("planet", planet.id)
-			TurnResolver.EVENT_ARRIVED_POINT:
-				_add_message("Arrived at destination.", "info")
-			TurnResolver.EVENT_REFUELED:
-				_add_message("Refueled.", "good")
-			TurnResolver.EVENT_ENTERED_HYPERSPACE:
-				_add_message("Entered hyperspace. %d day(s) to %s." % [event["days"], galaxy.get_system(event["system_id"]).name], "info")
-			TurnResolver.EVENT_ARRIVED_SYSTEM:
-				_add_message("Arrived in the %s system." % galaxy.get_system(event["system_id"]).name, "good")
-			TurnResolver.EVENT_JUMP_FAILED:
-				_add_message("Jump failed: not enough fuel or out of range.", "warning")
+		if event["type"] == Economy.EVENT_MARKET_EVENT:
+			_report_news(event)
+		elif event.get("ship_id") == ship.id:
+			_report_event(event)
 	_refresh()
+
+
+func _on_order_events(events: Array[Dictionary]) -> void:
+	for event in events:
+		_report_event(event)
+	_refresh()
+
+
+## Writes a log message about something that happened to the player's ship.
+func _report_event(event: Dictionary) -> void:
+	var galaxy := GameState.galaxy
+	var system := GameState.current_system()
+	match event["type"]:
+		TurnResolver.EVENT_ARRIVED_PLANET:
+			var planet := system.get_planet(event["planet_id"])
+			if planet.inhabited:
+				_add_message("Arrived at %s. Press L to land and trade." % planet.name, "good")
+			else:
+				_add_message("Arrived at %s." % planet.name, "good")
+			_selection_kind = "planet"
+			_selection_id = planet.id
+			EventBus.selection_changed.emit("planet", planet.id)
+		TurnResolver.EVENT_ARRIVED_POINT:
+			_add_message("Arrived at destination.", "info")
+		TurnResolver.EVENT_ENTERED_HYPERSPACE:
+			_add_message("Entered hyperspace. %d day(s) to %s." % [event["days"], galaxy.get_system(event["system_id"]).name], "info")
+		TurnResolver.EVENT_ARRIVED_SYSTEM:
+			_add_message("Arrived in the %s system." % galaxy.get_system(event["system_id"]).name, "good")
+		TurnResolver.EVENT_JUMP_FAILED:
+			_add_message("Jump failed: not enough fuel or out of range.", "warning")
+		Trade.EVENT_TRADED:
+			var good_name: String = GameData.good(event["good_id"]).get("name", "?")
+			var quantity: int = event["quantity"]
+			var where := " on the black market" if event["black_market"] else ""
+			if quantity > 0:
+				_add_message("Bought %d %s for %s%s." % [quantity, good_name, UiStyle.credits(event["credits"]), where], "info")
+			else:
+				_add_message("Sold %d %s for %s%s." % [-quantity, good_name, UiStyle.credits(-int(event["credits"])), where], "good")
+		Trade.EVENT_BUSTED:
+			var busted_good: String = GameData.good(event["good_id"]).get("name", "?")
+			var text := "BUSTED! Your black-market %s deal was a police sting. Fined %s." % [busted_good, UiStyle.credits(event["fine"])]
+			if event["quantity"] < 0:
+				text += " %d %s confiscated." % [-int(event["quantity"]), busted_good]
+			_add_message(text, "warning")
+		Trade.EVENT_SCANNED:
+			var confiscated: Dictionary = event["confiscated"]
+			if confiscated.is_empty():
+				_add_message("Police scanned your cargo. All clear.", "info")
+			else:
+				var parts: Array[String] = []
+				for good_id: String in confiscated:
+					parts.append("%d %s" % [confiscated[good_id], GameData.good(good_id).get("name", "?")])
+				_add_message("Police found contraband! Confiscated %s and fined %s." % [", ".join(parts), UiStyle.credits(event["fine"])], "warning")
+		Trade.EVENT_REFUELED:
+			var text := "Bought %.1f fuel for %s." % [event["amount"], UiStyle.credits(event["credits"])]
+			if event["free_amount"] > 0.0:
+				text += " The Ranger Corps added %.1f emergency fuel for free." % event["free_amount"]
+			_add_message(text, "good")
+
+
+## Galactic news about a market event, if it happened close enough to matter.
+func _report_news(event: Dictionary) -> void:
+	var galaxy := GameState.galaxy
+	var ship := GameState.player_ship()
+	var here := ship.jump_origin_system_id if ship.in_hyperspace else ship.system_id
+	if galaxy.distance_between(here, event["system_id"]) > NEWS_RANGE:
+		return
+	var system := galaxy.get_system(event["system_id"])
+	var planet := system.get_planet(event["planet_id"])
+	var news: String = GameData.market_event(event["event_id"]).get("news", "Something happened on %s.")
+	_add_message("NEWS: " + news % ("%s (%s system)" % [planet.name, system.name]), "info")
 
 
 func _on_selection_changed(kind: String, id: int) -> void:
@@ -220,6 +285,7 @@ func _refresh() -> void:
 	var ship := GameState.player_ship()
 	_end_turn_button.disabled = TurnManager.is_resolving
 	_auto_button.set_pressed_no_signal(TurnManager.auto_advance)
+	_land_button.disabled = Trade.market_planet(galaxy, ship) == null or TurnManager.is_resolving
 	_status_label.text = _status_text(galaxy, ship)
 	_info_label.text = _info_text(galaxy, ship)
 	_hyperspace_label.visible = ship.in_hyperspace
@@ -236,8 +302,9 @@ func _status_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		var race := GameData.race(system.race_id)
 		location = "%s system  [color=%s](%s)[/color]" % [system.name, race.get("color", "#fff"), race.get("name", "")]
 	var fuel_color := "#ffbf59" if ship.fuel < ship.fuel_max * 0.3 else "#e0e8ff"
-	return "[b]Day %d[/b]     %s     Fuel [color=%s]%.1f / %.0f[/color]     Jump range %.0f pc     %s" % [
-		galaxy.day, location, fuel_color, ship.fuel, ship.fuel_max, ship.jump_range, _course_text(galaxy, ship)]
+	return "[b]Day %d[/b]     %s     [color=#80ff99]%s[/color]     Cargo %d/%d     Fuel [color=%s]%.1f / %.0f[/color]     %s" % [
+		galaxy.day, location, UiStyle.credits(ship.credits), ship.cargo_used(), ship.cargo_capacity,
+		fuel_color, ship.fuel, ship.fuel_max, _course_text(galaxy, ship)]
 
 
 func _course_text(galaxy: GalaxyData, ship: ShipData) -> String:
@@ -274,8 +341,17 @@ func _info_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		"star":
 			var star_type := GameData.star_type(system.star_type_id)
 			return "[font_size=18][b]%s[/b][/font_size]\n%s\nPlanets: %d" % [system.name, star_type.get("name", ""), system.planets.size()]
-	return "[font_size=18][b]Your ship[/b][/font_size]\nSpeed: %.0f per day\nFuel: %.1f / %.0f\nJump range: %.0f pc\n\n[color=#9aa8c8]Click a planet to fly to it.\nOpen the Galaxy Map (M) to jump to another system.[/color]" % [
-		ship.speed, ship.fuel, ship.fuel_max, ship.jump_range]
+	return "[font_size=18][b]Your ship[/b][/font_size]\nSpeed: %.0f per day\nFuel: %.1f / %.0f\nJump range: %.0f pc\nCredits: %s\n%s\n\n[color=#9aa8c8]Click a planet to fly to it.\nLand (L) on inhabited planets to trade.\nOpen the Galaxy Map (M) to jump to another system.[/color]" % [
+		ship.speed, ship.fuel, ship.fuel_max, ship.jump_range, UiStyle.credits(ship.credits), _cargo_text(ship)]
+
+
+func _cargo_text(ship: ShipData) -> String:
+	var lines: Array[String] = ["Cargo: %d / %d" % [ship.cargo_used(), ship.cargo_capacity]]
+	for good: Dictionary in GameData.goods():
+		var amount := ship.cargo_amount(good["id"])
+		if amount > 0:
+			lines.append("  %d %s" % [amount, good["name"]])
+	return "\n".join(lines)
 
 
 func _planet_text(planet: PlanetData) -> String:
@@ -289,20 +365,69 @@ func _planet_text(planet: PlanetData) -> String:
 		lines.append("Economy: %s" % GameData.economy(planet.economy_id).get("name", "?"))
 		lines.append("Government: %s" % GameData.government(planet.government_id).get("name", "?"))
 		lines.append("Tech level: %d" % planet.tech_level)
-		lines.append("\n[color=#9aa8c8]Trading arrives in Milestone 2.\nLanding in first person arrives in Milestone 8.[/color]")
+		lines.append(_market_summary(planet))
+		var ship := GameState.player_ship()
+		if ship.orbiting_planet_id == planet.id and not ship.in_hyperspace:
+			lines.append("\n[color=#80ff99]In orbit. Press L to land and trade.[/color]")
+		else:
+			lines.append("\n[color=#9aa8c8]Fly here to land and trade.[/color]")
 	else:
 		lines.append("[color=#9aa8c8]Uninhabited. Exploring the surface arrives in Milestone 8.[/color]")
+	return "\n".join(lines)
+
+
+## Market hints for the info panel: what is cheap, what pays well, what is illegal.
+func _market_summary(planet: PlanetData) -> String:
+	var goods: Array = GameData.goods().duplicate()
+	goods.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return Economy.price_ratio(planet, a["id"]) < Economy.price_ratio(planet, b["id"]))
+	var cheap: Array[String] = []
+	var dear: Array[String] = []
+	var illegal: Array[String] = []
+	for good: Dictionary in goods:
+		var ratio := Economy.price_ratio(planet, good["id"])
+		if ratio < 0.85 and cheap.size() < 3:
+			cheap.append(good["name"])
+		if Economy.is_illegal(planet, good["id"]):
+			illegal.append(good["name"])
+	goods.reverse()
+	for good: Dictionary in goods:
+		if Economy.price_ratio(planet, good["id"]) > 1.15 and dear.size() < 3:
+			dear.append(good["name"])
+	var lines: Array[String] = [""]
+	if planet.event_id != "":
+		lines.append("[color=#ffbf59]%s! (%d days left)[/color]" % [GameData.market_event(planet.event_id).get("name", ""), planet.event_days_left])
+	lines.append("[color=#80ff99]Cheap here:[/color] %s" % (", ".join(cheap) if not cheap.is_empty() else "nothing special"))
+	lines.append("[color=#ffbf59]Pays well:[/color] %s" % (", ".join(dear) if not dear.is_empty() else "nothing special"))
+	if not illegal.is_empty():
+		lines.append("[color=#ff8a6b]Illegal:[/color] %s" % ", ".join(illegal))
 	return "\n".join(lines)
 
 
 # --- Input --------------------------------------------------------------------
 
 func _toggle_map() -> void:
+	if _planet_screen.is_open():
+		return
 	if _galaxy_map.visible:
 		_galaxy_map.close()
 	else:
 		_pause_menu.visible = false
 		_galaxy_map.open()
+
+
+func _toggle_planet_screen() -> void:
+	if _planet_screen.is_open():
+		_planet_screen.close()
+		return
+	if _galaxy_map.visible or _pause_menu.visible or TurnManager.is_resolving:
+		return
+	var planet := Trade.market_planet(GameState.galaxy, GameState.player_ship())
+	if planet == null:
+		_add_message("Fly to an inhabited planet first, then land to trade.", "warning")
+		return
+	TurnManager.set_auto_advance(false)
+	_planet_screen.open(planet)
 
 
 func _toggle_auto() -> void:
@@ -315,7 +440,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	match key.keycode:
 		KEY_SPACE:
-			if _galaxy_map.visible or _pause_menu.visible:
+			if _galaxy_map.visible or _pause_menu.visible or _planet_screen.is_open():
 				return
 			if key.shift_pressed:
 				_toggle_auto()
@@ -325,8 +450,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_M:
 			_toggle_map()
 			get_viewport().set_input_as_handled()
+		KEY_L:
+			_toggle_planet_screen()
+			get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
-			if _galaxy_map.visible:
+			if _planet_screen.is_open():
+				_planet_screen.close()
+			elif _galaxy_map.visible:
 				_galaxy_map.close()
 			else:
 				_pause_menu.visible = not _pause_menu.visible

@@ -19,6 +19,11 @@ var government_id: String = ""
 var tech_level: int = 0
 var population: int = 0 ## Millions.
 
+# Market (only used when inhabited). See Economy for how prices are worked out.
+var market_stock: Dictionary = {} ## good id -> units for sale.
+var event_id: String = "" ## Current market event ("" = none), e.g. "famine".
+var event_days_left: int = 0
+
 
 func position() -> Vector2:
 	return position_at_angle(orbit_angle)
@@ -49,6 +54,9 @@ func to_dict() -> Dictionary:
 		"government_id": government_id,
 		"tech_level": tech_level,
 		"population": population,
+		"market_stock": market_stock.duplicate(),
+		"event_id": event_id,
+		"event_days_left": event_days_left,
 	}
 
 
@@ -68,4 +76,9 @@ static func from_dict(d: Dictionary) -> PlanetData:
 	p.government_id = str(d.get("government_id", ""))
 	p.tech_level = int(d.get("tech_level", 0))
 	p.population = int(d.get("population", 0))
+	var stock: Dictionary = d.get("market_stock", {})
+	for good_id: String in stock:
+		p.market_stock[good_id] = int(stock[good_id])
+	p.event_id = str(d.get("event_id", ""))
+	p.event_days_left = int(d.get("event_days_left", 0))
 	return p

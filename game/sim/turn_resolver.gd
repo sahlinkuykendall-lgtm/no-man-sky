@@ -19,19 +19,29 @@ const EVENT_ARRIVED_POINT := "arrived_point"
 const EVENT_ENTERED_HYPERSPACE := "entered_hyperspace"
 const EVENT_ARRIVED_SYSTEM := "arrived_system"
 const EVENT_JUMP_FAILED := "jump_failed"
-const EVENT_REFUELED := "refueled"
+# Trading and market events are listed in Trade and Economy.
 
 
 ## Gives a ship a new order. Returns "" on success, or a message explaining why not.
+## Orders that happen instantly (trading) add what happened to `events`.
 ## Orders: {"type": "move_to_point", "point": Vector2}
 ##         {"type": "move_to_planet", "planet_id": int}
 ##         {"type": "jump", "system_id": int}
 ##         {"type": "stop"}
-static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary) -> String:
+##         {"type": "buy", "good_id": String, "quantity": int}  (while orbiting an inhabited planet)
+##         {"type": "sell", "good_id": String, "quantity": int}
+##         {"type": "refuel"}
+static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, events: Array[Dictionary] = []) -> String:
 	if ship.in_hyperspace:
 		return "Can't change course while in hyperspace."
 	var system := galaxy.get_system(ship.system_id)
 	match order.get("type", ""):
+		"buy":
+			return Trade.buy(galaxy, ship, str(order.get("good_id", "")), int(order.get("quantity", 0)), events)
+		"sell":
+			return Trade.sell(galaxy, ship, str(order.get("good_id", "")), int(order.get("quantity", 0)), events)
+		"refuel":
+			return Trade.refuel(galaxy, ship, events)
 		"move_to_point":
 			var point: Vector2 = order.get("point", ship.position)
 			ship.clear_course()
@@ -59,7 +69,7 @@ static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary) -
 			if distance > ship.jump_range:
 				return "%s is out of jump range (%.1f pc, your range is %.1f pc)." % [target.name, distance, ship.jump_range]
 			if distance * FUEL_PER_PARSEC > ship.fuel:
-				return "Not enough fuel to reach %s (need %.1f, have %.1f)." % [target.name, distance * FUEL_PER_PARSEC, ship.fuel]
+				return "Not enough fuel to reach %s (need %.1f, have %.1f). Buy fuel at an inhabited planet." % [target.name, distance * FUEL_PER_PARSEC, ship.fuel]
 			ship.clear_course()
 			ship.orbiting_planet_id = -1
 			ship.jump_target_system_id = target_id
@@ -78,6 +88,7 @@ static func resolve_turn(galaxy: GalaxyData) -> Array[Dictionary]:
 	for system in galaxy.systems:
 		for planet in system.planets:
 			planet.advance(1)
+	Economy.daily_update(galaxy, events)
 	for ship in galaxy.ships:
 		if not ship.is_player:
 			NpcBrain.think(galaxy, ship)
@@ -126,7 +137,7 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 	if ship.orbiting_planet_id >= 0:
 		var orbited := system.get_planet(ship.orbiting_planet_id)
 		ship.position = orbited.position() + ship.orbit_offset
-		_service_at_planet(ship, orbited, events)
+		_service_at_planet(ship, orbited)
 		return
 	if not ship.has_destination:
 		return
@@ -157,7 +168,8 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 		ship.orbiting_planet_id = planet.id
 		ship.clear_course()
 		events.append({"type": EVENT_ARRIVED_PLANET, "ship_id": ship.id, "planet_id": planet.id})
-		_service_at_planet(ship, planet, events)
+		Trade.police_scan(galaxy, ship, planet, events)
+		_service_at_planet(ship, planet)
 	elif ship.jump_target_system_id >= 0:
 		ship.position = target
 		_enter_hyperspace(galaxy, ship, events)
@@ -199,9 +211,8 @@ static func _exit_hyperspace(galaxy: GalaxyData, ship: ShipData, events: Array[D
 	events.append({"type": EVENT_ARRIVED_SYSTEM, "ship_id": ship.id, "system_id": arrival.id})
 
 
-## Free refuelling at inhabited planets. Milestone 2 (trade) will make fuel cost money.
-static func _service_at_planet(ship: ShipData, planet: PlanetData, events: Array[Dictionary]) -> void:
-	if planet.inhabited and ship.fuel < ship.fuel_max:
+## NPC ships refuel for free at inhabited planets (they have no money yet; Milestone 5
+## gives them real trading). Players buy fuel with the "refuel" order.
+static func _service_at_planet(ship: ShipData, planet: PlanetData) -> void:
+	if not ship.is_player and planet.inhabited and ship.fuel < ship.fuel_max:
 		ship.fuel = ship.fuel_max
-		if ship.is_player:
-			events.append({"type": EVENT_REFUELED, "ship_id": ship.id, "planet_id": planet.id})

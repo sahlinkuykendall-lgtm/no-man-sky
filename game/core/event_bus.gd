@@ -12,8 +12,10 @@ signal turn_resolved(day: int, events: Array[Dictionary])
 ## The resolve animation finished; players may give orders again.
 signal turn_ready
 
-## The player's orders changed (new course, stop, etc.).
+## The player's orders changed (new course, stop, trade, etc.).
 signal player_order_changed
+## An order that happens instantly (buying, selling, refuelling) produced these events.
+signal order_events(events: Array[Dictionary])
 
 ## The player selected something. kind: "planet", "star", "ship" or "" (nothing).
 signal selection_changed(kind: String, id: int)

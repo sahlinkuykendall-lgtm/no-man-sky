@@ -41,6 +41,14 @@ static func governments() -> Array:
 	return load_json("world.json").get("governments", [])
 
 
+static func goods() -> Array:
+	return load_json("goods.json").get("goods", [])
+
+
+static func market_events() -> Array:
+	return load_json("goods.json").get("events", [])
+
+
 static func name_syllables() -> Dictionary:
 	return load_json("names.json")
 
@@ -71,6 +79,14 @@ static func economy(id: String) -> Dictionary:
 
 static func government(id: String) -> Dictionary:
 	return find_by_id(governments(), id)
+
+
+static func good(id: String) -> Dictionary:
+	return find_by_id(goods(), id)
+
+
+static func market_event(id: String) -> Dictionary:
+	return find_by_id(market_events(), id)
 
 
 ## Picks a random entry, using each entry's "weight" field (default 1).

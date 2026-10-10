@@ -20,6 +20,11 @@ var speed: float = 150.0 ## System units per day.
 var fuel: float = 30.0
 var fuel_max: float = 30.0
 var jump_range: float = 20.0 ## Parsecs.
+var cargo_capacity: int = 0 ## Units (tons) of goods the hold can carry.
+
+# Money and cargo. For now the pilot's money lives on their ship.
+var credits: int = 0
+var cargo: Dictionary = {} ## good id -> units carried. Goods with 0 units are removed.
 
 # Current course. Only one of these targets is used at a time.
 var has_destination: bool = false
@@ -38,6 +43,31 @@ var jump_days_left: int = 0
 
 # Simple NPC memory.
 var idle_days: int = 0
+
+
+## Total units of cargo on board.
+func cargo_used() -> int:
+	var total := 0
+	for good_id: String in cargo:
+		total += int(cargo[good_id])
+	return total
+
+
+func cargo_free() -> int:
+	return cargo_capacity - cargo_used()
+
+
+func cargo_amount(good_id: String) -> int:
+	return int(cargo.get(good_id, 0))
+
+
+## Adds (or with a negative amount, removes) cargo.
+func add_cargo(good_id: String, amount: int) -> void:
+	var new_amount := cargo_amount(good_id) + amount
+	if new_amount > 0:
+		cargo[good_id] = new_amount
+	else:
+		cargo.erase(good_id)
 
 
 ## Forgets the current course (does not leave orbit).
@@ -61,6 +91,9 @@ func to_dict() -> Dictionary:
 		"fuel": fuel,
 		"fuel_max": fuel_max,
 		"jump_range": jump_range,
+		"cargo_capacity": cargo_capacity,
+		"credits": credits,
+		"cargo": cargo.duplicate(),
 		"has_destination": has_destination,
 		"destination": [destination.x, destination.y],
 		"target_planet_id": target_planet_id,
@@ -88,6 +121,11 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.fuel = float(d.get("fuel", 30.0))
 	s.fuel_max = float(d.get("fuel_max", 30.0))
 	s.jump_range = float(d.get("jump_range", 20.0))
+	s.cargo_capacity = int(d.get("cargo_capacity", 0))
+	s.credits = int(d.get("credits", 0))
+	var hold: Dictionary = d.get("cargo", {})
+	for good_id: String in hold:
+		s.add_cargo(good_id, int(hold[good_id]))
 	s.has_destination = bool(d.get("has_destination", false))
 	s.destination = _vec(d.get("destination", [0, 0]))
 	s.target_planet_id = int(d.get("target_planet_id", -1))

@@ -108,6 +108,11 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 35 | Engine version (2026-10-10) | Godot **4.7** (latest stable when development started) |
 | 36 | Testing (2026-10-10) | A small built-in test runner (`tests/run_tests.gd`) plus a headless smoke test that plays the game. This replaces the GUT plugin to avoid an external dependency |
 | 37 | Hyperspace departure (2026-10-10) | As in SR2, ships must fly out to the system's **hyperspace boundary** (dashed purple ring) before jumping. Fuel = 1 per parsec, and transit takes 1 day per 8 pc |
+| 38 | Market prices (M2) | Price = base × economy × tech level × government × race × a small fixed per-planet quirk × event × supply. Supply: fewer units in stock means a higher price. Each market buys 5% below and sells 5% above its middle price, so buying and selling straight back always loses money. Stock drifts back to normal by 8% of the gap per day. Numbers live in `game/data/goods.json`, `world.json` and `races.json` |
+| 39 | Contraband & black market (M2) | Illegal goods (by government, §11, plus race bans) can still be traded on the planet's **black market**: 40% pricier, less stock, and each deal risks a sting (fine + confiscation). Police scan ships that arrive at a planet with cargo (chance by government) and confiscate contraband with a fine. Anarchies scan nothing. Wanted status and karma come later (M5–M7) |
+| 40 | Lumari ban alcohol (M2) | Gives §10's "Alcohol: illegal on some worlds" a home: it's illegal on every Lumari world |
+| 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold. Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free until M5 gives them real trading |
+| 42 | Trading takes no time (M2) | Landing (L) on an inhabited planet you orbit opens its market. Trading is instant and costs no turn, like SR2. Credits live on the player's ship until pilots/characters are their own data (M15) |
 
 ---
 
@@ -325,6 +330,14 @@ Each item has: **tech level (1–8)**, **manufacturer race** (affects price, qua
 
 ### Money
 - **Credits (cr)**. Sinks: equipment, repairs, fuel, rent and property, hiring, fines, bribes, investments in stations (§14).
+
+### How the prototype works (Milestone 2)
+- **Goods built so far:** the 8 base goods. The additions above arrive with the systems that produce them (planets M8–M9, combat M4, the Ascendancy M6).
+- **Markets:** every inhabited planet has one. Open it with **Land (L)** while in orbit. The market screen shows each good's typical price, the buy and sell price (green = a good deal), the market's stock and your hold.
+- **Prices** follow Decision #38. Producers (farm worlds for food and alcohol, industrial worlds for minerals, medicine, technology and weapons) sell cheaply. High-tech worlds sell technology, medicine and weapons for less. Rich democracies pay more for luxuries. Races have tastes (for example, the Gorruk make cheap weapons and pay a lot for alcohol). Prices move as you trade, so a route fades if you farm it, and recovers over a week or two.
+- **Market events:** famine, plague, bumper harvest, border war, miners' strike, tech boom and grand festival. Each lasts 5–20 days. The news reaches you if it happens within 40 pc. The planet info panel shows what is cheap, what pays well and what is illegal.
+- **Contraband, police and the black market:** Decision #39.
+- **Fuel:** Decision #41.
 
 ---
 
@@ -877,7 +890,8 @@ Content is defined in **data files**, so AIs can add it without code changes: go
 
 ### Testing
 - A built-in runner, `tests/run_tests.gd`, runs every `tests/**/test_*.gd` (each one extends `TestCase`). The economy, combat math and turn resolution must be tested.
-- `tests/smoke_test.gd` plays the real game headlessly and fails on any logged error.
+- A test also fails if it logs a script error, even when its asserts pass.
+- `tests/smoke_test.gd` plays the real game headlessly (including trading) and fails on any logged error.
 - GitHub Actions runs both on every push.
 
 ---
@@ -890,7 +904,7 @@ The order is chosen so each milestone produces something **playable** and later 
 |---|---|---|
 | **M0 Setup** ✅ | Godot project, folders, autoloads, test framework, CI | Empty project that runs |
 | **M1 Galaxy & Turns** ✅ | Generate a galaxy and systems, isometric camera, fly the ship, End Turn, orbiting planets | Fly around a galaxy |
-| **M2 Trade** | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
+| **M2 Trade** ✅ | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
 | **M3 Ships & Gear** | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
 | **M4 Space Combat** | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |
 | **M5 Living Galaxy** | NPC traders, pirates, police, rangers with AI; news ticker; hailing and negotiation | Galaxy runs without you |

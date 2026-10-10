@@ -2,10 +2,26 @@ extends SceneTree
 ## Finds every tests/**/test_*.gd file, runs its test_* methods and reports the results.
 ## Exit code is 0 when everything passes, 1 otherwise (used by GitHub Actions).
 ##
+## A test also fails if it logs a script error (for example a bad dictionary lookup),
+## even when all of its asserts passed.
+##
 ## Usage: godot --headless -s res://tests/run_tests.gd
 
 
+class ErrorCounter extends Logger:
+	var count: int = 0
+
+	func _log_error(_function: String, _file: String, _line: int, _code: String, _rationale: String,
+			_editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		count += 1
+
+	func _log_message(_message: String, _error: bool) -> void:
+		pass
+
+
 func _initialize() -> void:
+	var errors := ErrorCounter.new()
+	OS.add_logger(errors)
 	var files: Array[String] = []
 	_collect("res://tests", files)
 	files.sort()
@@ -28,7 +44,10 @@ func _initialize() -> void:
 			total += 1
 			test_case.current_test = "%s::%s" % [path.get_file(), method_name]
 			var failures_before := test_case.failures.size()
+			var errors_before := errors.count
 			test_case.call(method_name)
+			if errors.count > errors_before:
+				test_case.failures.append("%s: logged %d script error(s)" % [test_case.current_test, errors.count - errors_before])
 			var passed := test_case.failures.size() == failures_before
 			print("  %s %s" % ["PASS" if passed else "FAIL", test_case.current_test])
 		failed.append_array(test_case.failures)

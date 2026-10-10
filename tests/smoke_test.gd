@@ -1,6 +1,6 @@
 extends SceneTree
-## Plays the real game headlessly for a while (menu -> new game -> fly -> jump -> save/load
-## -> back to menu) and fails if any script error or warning was logged.
+## Plays the real game headlessly for a while (menu -> new game -> trade -> fly -> jump ->
+## save/load -> back to menu) and fails if any script error or warning was logged.
 ##
 ## Usage: godot --headless -s res://tests/smoke_test.gd
 
@@ -50,6 +50,22 @@ func _run() -> void:
 	var ship: ShipData = galaxy.player_ship()
 	_check(ship != null, "no player ship")
 
+	# Land on the starting planet, trade through the market screen, and take off again.
+	var hud: Node = main.get_node("Game").get_child(1)
+	hud.call("_toggle_planet_screen")
+	await _frames(3)
+	var planet_screen: Node = hud.get("_planet_screen")
+	_check(planet_screen.call("is_open"), "planet screen did not open")
+	var credits_before := ship.credits
+	planet_screen.call("_submit", "buy", "food", 9999)
+	await _frames(2)
+	_check(ship.cargo_amount("food") > 0 and ship.credits < credits_before, "buying food failed")
+	planet_screen.call("_submit", "sell", "food", 1)
+	planet_screen.call("_on_refuel") # Tank is full: should only post a message.
+	await _frames(2)
+	hud.call("_toggle_planet_screen")
+	_check(not planet_screen.call("is_open"), "planet screen did not close")
+
 	# Fly to another planet with Auto, then jump to a neighbouring system.
 	var system := galaxy.get_system(ship.system_id)
 	var other_planet := system.planets[0] if system.planets[0].id != ship.orbiting_planet_id else system.planets[-1]
@@ -64,7 +80,6 @@ func _run() -> void:
 			target = other.id
 			break
 	_check(target >= 0, "no reachable neighbour system")
-	var hud: Node = main.get_node("Game").get_child(1)
 	hud.call("_toggle_map")
 	await _frames(3)
 	hud.call("_toggle_map")
@@ -74,6 +89,7 @@ func _run() -> void:
 		turn_manager.set_auto_advance(true)
 		await _wait_until(func() -> bool: return not turn_manager.auto_advance and not turn_manager.is_resolving, 30.0)
 	_check(galaxy.player_ship().system_id == target, "never arrived in the target system")
+	_check(galaxy.player_ship().cargo_amount("food") > 0, "cargo got lost on the way")
 
 	# Click in space, save, load, and go back to the menu.
 	main.get_node("Game").get_child(0).call("_on_left_click", Vector2(300, 300))

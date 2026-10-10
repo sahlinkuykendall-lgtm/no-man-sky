@@ -10,10 +10,12 @@ A Godot 4 space game. Space is turn-based and isometric, with trading, combat an
 |---|---|
 | M0: project setup, core systems, tests, CI | ✅ Done |
 | M1: galaxy generation, isometric space view, turns, hyperspace jumps | ✅ Done (first playable) |
-| M2: trading | Next |
+| M2: trading (markets, supply and demand, contraband, black market, fuel costs) | ✅ Done |
+| M3: ships and gear | Next |
 
-![Star system view](docs/screenshots/m1_system_view.png)
-![Galaxy map](docs/screenshots/m1_galaxy_map.png)
+![Star system view](docs/screenshots/m2_system_view.png)
+![Planet market](docs/screenshots/m2_planet_market.png)
+![Galaxy map](docs/screenshots/m2_galaxy_map.png)
 
 ## How to play the current build
 
@@ -30,10 +32,15 @@ A Godot 4 space game. Space is turn-based and isometric, with trading, combat an
 | End turn (everything moves at once) | **Space** or the *End Turn* button |
 | Auto: keep ending turns until you arrive | **Shift+Space** or *Auto ▶▶* |
 | Galaxy map (pick a system, set jump course) | **M** |
+| Land on the planet you orbit (trade, refuel) | **L** or *Land* |
 | Move camera | Right-drag, or WASD / arrow keys |
 | Zoom | Mouse wheel |
 | Center on your ship | **F** |
 | Menu (save / load / quit) | **Esc** |
+
+### Making money
+
+You start with 2,500 cr and an empty 60-ton hold. Click a planet to see what's cheap there and what pays well. Fly to an inhabited one and press **L** to land. Buy goods where they're cheap (green buy price) and sell them where they pay well (green sell price). Farm worlds make food, industrial worlds make technology and minerals, and events like famines and plagues send prices soaring. Every trade moves the price, so a route stops paying if you farm it. Goods marked *BLACK MARKET* are illegal on that planet: they pay more, but police may catch you. Fuel costs money now, so keep some credits for it.
 
 ## For developers (and AI assistants)
 

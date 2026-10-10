@@ -1,15 +1,25 @@
 {
-	"_comment": "Economy and government types for inhabited planets (docs/MASTER_DESIGN.md sections 10-11).",
+	"_comment": "Economy and government types for inhabited planets (docs/MASTER_DESIGN.md sections 10-11). Government fields: 'illegal_goods' are contraband there; 'scan_chance' is the chance police scan you when you arrive; 'black_market_risk' is the chance a black-market deal gets busted; 'fine_rate' is the fine as a share of the contraband's value; 'prices' multiplies the price of some goods; 'fuel_price' is credits per unit of fuel.",
 	"economies": [
 		{ "id": "agricultural", "name": "Agricultural", "weight": 35 },
 		{ "id": "industrial", "name": "Industrial", "weight": 35 },
 		{ "id": "mixed", "name": "Mixed", "weight": 30 }
 	],
 	"governments": [
-		{ "id": "anarchy", "name": "Anarchy", "weight": 10 },
-		{ "id": "dictatorship", "name": "Dictatorship", "weight": 20 },
-		{ "id": "monarchy", "name": "Monarchy", "weight": 20 },
-		{ "id": "republic", "name": "Republic", "weight": 25 },
-		{ "id": "democracy", "name": "Democracy", "weight": 25 }
+		{ "id": "anarchy", "name": "Anarchy", "weight": 10, "illegal_goods": [],
+			"scan_chance": 0.0, "black_market_risk": 0.0, "fine_rate": 0.0, "fuel_price": 14,
+			"prices": { "weapons": 1.15, "narcotics": 0.85 } },
+		{ "id": "dictatorship", "name": "Dictatorship", "weight": 20, "illegal_goods": ["weapons", "narcotics"],
+			"scan_chance": 0.6, "black_market_risk": 0.25, "fine_rate": 1.0, "fuel_price": 9,
+			"prices": {} },
+		{ "id": "monarchy", "name": "Monarchy", "weight": 20, "illegal_goods": ["narcotics"],
+			"scan_chance": 0.35, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 11,
+			"prices": { "luxuries": 1.15 } },
+		{ "id": "republic", "name": "Republic", "weight": 25, "illegal_goods": ["narcotics"],
+			"scan_chance": 0.3, "black_market_risk": 0.12, "fine_rate": 0.5, "fuel_price": 10,
+			"prices": {} },
+		{ "id": "democracy", "name": "Democracy", "weight": 25, "illegal_goods": ["narcotics", "weapons"],
+			"scan_chance": 0.4, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 10,
+			"prices": { "luxuries": 1.3 } }
 	]
 }

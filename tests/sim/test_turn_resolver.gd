@@ -92,7 +92,7 @@ func test_full_jump_to_neighbor_system() -> void:
 	var arrived := false
 	for i in 80:
 		for event in TurnResolver.resolve_turn(galaxy):
-			if event["ship_id"] != ship.id:
+			if event.get("ship_id") != ship.id:
 				continue
 			if event["type"] == TurnResolver.EVENT_ENTERED_HYPERSPACE:
 				entered = true

@@ -4,15 +4,18 @@ extends CanvasLayer
 ## galaxy map, planet (trade) screen and pause menu.
 ##
 ## Keys: Space = End Turn, Shift+Space = Auto (fly until arrival), M = galaxy map,
-## L = land on the planet you orbit (trade), Esc = menu, F = center camera on ship.
+## L = land on the planet you orbit (trade), T = attack / cease fire on the selected
+## pirate or asteroid, Esc = menu, F = center camera on ship.
 
-const MAX_LOG_LINES := 8
+const MAX_LOG_LINES := 6
 ## Galactic news about market events reaches you from systems this close (parsecs).
 const NEWS_RANGE := 40.0
 
 var _root: Control
 var _status_label: RichTextLabel
 var _info_label: RichTextLabel
+var _action_button: Button ## "Attack", "Cease fire" or "Shoot" for the selected thing.
+var _action_order: Dictionary = {} ## The order the action button sends.
 var _log_label: RichTextLabel
 var _log_lines: Array[String] = []
 var _end_turn_button: Button
@@ -74,8 +77,14 @@ func _build_info_panel() -> void:
 	panel.offset_top = 64
 	panel.custom_minimum_size = Vector2(290, 0)
 	_root.add_child(panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	panel.add_child(column)
 	_info_label = _rich_label()
-	panel.add_child(_info_label)
+	column.add_child(_info_label)
+	_action_button = UiStyle.make_button("", _on_action_pressed)
+	_action_button.visible = false
+	column.add_child(_action_button)
 
 
 func _build_log() -> void:
@@ -185,12 +194,64 @@ func _on_galaxy_loaded() -> void:
 
 func _on_turn_resolved(_day: int, events: Array[Dictionary]) -> void:
 	var ship := GameState.player_ship()
+	# Warnings first, then the fighting, then everything else.
 	for event in events:
-		if event["type"] == Economy.EVENT_MARKET_EVENT:
-			_report_news(event)
-		elif event.get("ship_id") == ship.id:
+		if event["type"] == Combat.EVENT_UNDER_ATTACK and event["ship_id"] == ship.id:
 			_report_event(event)
+	_report_shots(events)
+	for event in events:
+		match event["type"]:
+			Economy.EVENT_MARKET_EVENT:
+				_report_news(event)
+			Combat.EVENT_SHOT, Combat.EVENT_UNDER_ATTACK:
+				pass # Already reported above.
+			Combat.EVENT_SHIP_DESTROYED:
+				if event["killer_id"] == ship.id:
+					_report_event(event)
+			_:
+				if event.get("ship_id") == ship.id:
+					_report_event(event)
 	_refresh()
+
+
+## One line per turn for the damage you dealt and one for the damage you took.
+func _report_shots(events: Array[Dictionary]) -> void:
+	var galaxy := GameState.galaxy
+	var ship := GameState.player_ship()
+	var names := {} ## ship id -> name (destroyed ships are already gone from the galaxy)
+	for event in events:
+		if event["type"] == Combat.EVENT_SHIP_DESTROYED:
+			names[event["ship_id"]] = event["name"]
+	var dealt := {} ## target name -> damage
+	var taken := {} ## attacker name -> damage
+	for event in events:
+		if event["type"] != Combat.EVENT_SHOT:
+			continue
+		if event["ship_id"] == ship.id:
+			var target_name := "an asteroid"
+			if event["target_kind"] == Combat.TARGET_SHIP:
+				target_name = _ship_name(galaxy, event["target_id"], names)
+			dealt[target_name] = int(dealt.get(target_name, 0)) + int(event["damage"])
+		elif event["target_kind"] == Combat.TARGET_SHIP and event["target_id"] == ship.id:
+			var attacker_name := _ship_name(galaxy, event["ship_id"], names)
+			taken[attacker_name] = int(taken.get(attacker_name, 0)) + int(event["damage"])
+	var parts: Array[String] = []
+	for target_name: String in dealt:
+		parts.append("%s for %d" % [target_name, dealt[target_name]])
+	if not parts.is_empty():
+		_add_message("You hit %s." % ", ".join(parts), "info")
+	parts.clear()
+	for attacker_name: String in taken:
+		parts.append("%s hit you for %d" % [attacker_name, taken[attacker_name]])
+	if not parts.is_empty():
+		_add_message("%s. Hull %d / %d." % [", ".join(parts), roundi(ship.hull_hp), roundi(ship.hull_hp_max)], "warning")
+
+
+static func _ship_name(galaxy: GalaxyData, ship_id: int, names: Dictionary) -> String:
+	var other := galaxy.get_ship(ship_id)
+	if other != null:
+		return other.name
+	return names.get(ship_id, "someone")
 
 
 func _on_order_events(events: Array[Dictionary]) -> void:
@@ -260,6 +321,35 @@ func _report_event(event: Dictionary) -> void:
 			if event["free"]:
 				text += " The Ranger Corps patched up your worn gear for free."
 			_add_message(text, "good")
+		Shipyard.EVENT_SOLD_ITEM:
+			var sold := ItemData.make(event["type_id"], event["race_id"])
+			_add_message("Sold your %s for %s." % [sold.display_name(), UiStyle.credits(event["credits"])], "good")
+		Combat.EVENT_UNDER_ATTACK:
+			var attacker := galaxy.get_ship(event["attacker_id"])
+			var attacker_name := attacker.name if attacker != null else "A pirate"
+			_add_message("%s is coming for you! Fight back (select it, T) or flee to an inhabited planet." % attacker_name, "warning")
+		Combat.EVENT_SHIP_DESTROYED:
+			var text := "You destroyed %s!" % event["name"]
+			if event["bounty"] > 0:
+				text += " The Ranger Corps pays a bounty of %s." % UiStyle.credits(event["bounty"])
+			_add_message(text + " Its wreck left a cargo container.", "good")
+		Combat.EVENT_ASTEROID_DESTROYED:
+			_add_message("The asteroid broke up into %d minerals. Fly close to pick them up." % event["minerals"], "good")
+		Combat.EVENT_COLLECTED:
+			var parts: Array[String] = []
+			for good_id: String in event["cargo"]:
+				parts.append("%d %s" % [event["cargo"][good_id], GameData.good(good_id).get("name", "?")])
+			var text := "Your gripper picked up %s." % ", ".join(parts)
+			if event["left_behind"]:
+				text += " Your hold is full, so some cargo was left behind."
+			_add_message(text, "good")
+		Combat.EVENT_RESCUED:
+			var rescue_system := galaxy.get_system(event["rescue_system_id"])
+			var text := "Your ship was destroyed! The Ranger Corps towed the wreck to %s and charged %s." % [
+				rescue_system.get_planet(event["planet_id"]).name, UiStyle.credits(event["fee"])]
+			if event["lost_cargo"] > 0:
+				text += " Your cargo (%d t) was left in a container where you were hit." % event["lost_cargo"]
+			_add_message(text + " Repair your hull at the shipyard.", "warning")
 		Shipyard.EVENT_EQUIPMENT_WORN:
 			_add_message("Your %s is worn out and losing power. Repair it at a shipyard." % str(Equipment.KIND_NAMES[event["kind"]]).to_lower(), "warning")
 
@@ -301,6 +391,7 @@ func _refresh() -> void:
 	_land_button.disabled = Trade.market_planet(galaxy, ship) == null or TurnManager.is_resolving
 	_status_label.text = _status_text(galaxy, ship)
 	_info_label.text = _info_text(galaxy, ship)
+	_update_action_button(galaxy, ship)
 	_hyperspace_label.visible = ship.in_hyperspace
 	if ship.in_hyperspace:
 		_hyperspace_label.text = "IN HYPERSPACE\n→ %s\n%d day(s) remaining" % [galaxy.get_system(ship.jump_target_system_id).name, ship.jump_days_left]
@@ -315,15 +406,18 @@ func _status_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		var race := GameData.race(system.race_id)
 		location = "%s system  [color=%s](%s)[/color]" % [system.name, race.get("color", "#fff"), race.get("name", "")]
 	var fuel_color := "#ffbf59" if ship.fuel < ship.fuel_max * 0.3 else "#e0e8ff"
-	return "[b]Day %d[/b]     %s     [color=#80ff99]%s[/color]     Cargo %d/%d     Fuel [color=%s]%.1f / %.0f[/color]     %s" % [
-		galaxy.day, location, UiStyle.credits(ship.credits), ship.cargo_used(), ship.cargo_capacity,
-		fuel_color, ship.fuel, ship.fuel_max, _course_text(galaxy, ship)]
+	var hull_color := "#ff6b5b" if ship.hull_hp < ship.hull_hp_max * 0.35 else "#e0e8ff"
+	return "[b]Day %d[/b]    %s    [color=#80ff99]%s[/color]    Hull [color=%s]%d/%d[/color]    Cargo %d/%d    Fuel [color=%s]%.1f/%.0f[/color]    %s" % [
+		galaxy.day, location, UiStyle.credits(ship.credits), hull_color, roundi(ship.hull_hp), roundi(ship.hull_hp_max),
+		ship.cargo_used(), ship.cargo_capacity, fuel_color, ship.fuel, ship.fuel_max, _course_text(galaxy, ship)]
 
 
 func _course_text(galaxy: GalaxyData, ship: ShipData) -> String:
 	if ship.in_hyperspace:
 		return "[color=#c9a6ff]Jumping to %s[/color]" % galaxy.get_system(ship.jump_target_system_id).name
 	var system := galaxy.get_system(ship.system_id)
+	if ship.pursue and Combat.target_exists(galaxy, ship):
+		return "[color=#ff8a6b]Attacking %s[/color]" % _target_name(galaxy, ship)
 	if ship.orbiting_planet_id >= 0:
 		return "[color=#80ff99]In orbit of %s[/color]" % system.get_planet(ship.orbiting_planet_id).name
 	if not ship.has_destination:
@@ -348,14 +442,20 @@ func _info_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		"ship":
 			var other := galaxy.get_ship(_selection_id)
 			if other and not other.in_hyperspace and other.system_id == ship.system_id:
-				var race := GameData.race(other.race_id)
-				return "[font_size=18][b]%s[/b][/font_size]\n[color=%s]%s[/color] %s\n\n[color=#9aa8c8]Hailing, trading and combat arrive in later milestones.[/color]" % [
-					other.name, race.get("color", "#fff"), race.get("name", ""), other.role.capitalize()]
+				return _ship_text(galaxy, ship, other)
+		"asteroid":
+			var asteroid := system.get_asteroid(_selection_id)
+			if asteroid and asteroid.exists():
+				return _asteroid_text(ship, asteroid)
+		"loot":
+			var container := system.get_loot(_selection_id)
+			if container:
+				return _loot_text(ship, container)
 		"star":
 			var star_type := GameData.star_type(system.star_type_id)
 			return "[font_size=18][b]%s[/b][/font_size]\n%s\nPlanets: %d" % [system.name, star_type.get("name", ""), system.planets.size()]
-	return "[font_size=18][b]Your ship[/b][/font_size]\n%s\nSpeed: %.0f per day\nFuel: %.1f / %.0f\nJump range: %.0f pc (%.0f pc/day)\nCredits: %s\n%s\n\n[color=#9aa8c8]Click a planet to fly to it.\nLand (L) on inhabited planets to trade, buy equipment and repair.\nOpen the Galaxy Map (M) to jump to another system.[/color]" % [
-		_equipment_text(ship), ship.speed, ship.fuel, ship.fuel_max, ship.jump_range, ship.jump_speed, UiStyle.credits(ship.credits), _cargo_text(ship)]
+	return "[font_size=18][b]Your ship[/b][/font_size]\n%s\nSpeed %.0f/day · Jump %.0f pc (%.0f pc/day)\n%s\n\n[color=#9aa8c8]Click a planet to fly to it. Land (L) to trade, buy gear and repair.\nClick a pirate (red) or an asteroid, then Attack (T).\nGalaxy Map (M) to jump to another system.[/color]" % [
+		_equipment_text(ship), ship.speed, ship.jump_range, ship.jump_speed, _cargo_text(ship)]
 
 
 ## Hull and equipment with their condition (orange when worn out).
@@ -363,12 +463,106 @@ func _equipment_text(ship: ShipData) -> String:
 	if ship.hull == null:
 		return ""
 	var lines: Array[String] = ["%s  (hull %d / %d)" % [ship.hull.display_name(), roundi(ship.hull_hp), roundi(ship.hull_hp_max)]]
-	for kind: String in ["engine", "fuel_tank"]:
-		var item := ship.slot(kind)
-		if item != null:
-			var color := "#e0e8ff" if item.condition >= Equipment.WORN_CONDITION else "#ffbf59"
-			lines.append("%s  [color=%s]%d%%[/color]" % [item.stats().get("name", "?"), color, floori(item.condition)])
+	var items: Array[ItemData] = ship.equipment()
+	for item in items:
+		var color := "#e0e8ff" if item.condition >= Equipment.WORN_CONDITION else "#ffbf59"
+		var line := "%s  [color=%s]%d%%[/color]" % [item.stats().get("name", "?"), color, floori(item.condition)]
+		if item.max_ammo() > 0:
+			line += "  (%d/%d missiles)" % [item.ammo, item.max_ammo()]
+		lines.append(line)
+	if ship.weapons.is_empty():
+		lines.append("[color=#ffbf59]No weapons[/color]")
 	return "\n".join(lines)
+
+
+## Info about another ship: who they are, how damaged, how dangerous.
+func _ship_text(galaxy: GalaxyData, ship: ShipData, other: ShipData) -> String:
+	var race := GameData.race(other.race_id)
+	var lines: Array[String] = ["[font_size=18][b]%s[/b][/font_size]" % other.name]
+	if other.is_pirate():
+		lines.append("[color=#ff6b5b]Pirate[/color] ([color=%s]%s[/color] renegade)" % [race.get("color", "#fff"), race.get("name", "")])
+	else:
+		lines.append("[color=%s]%s[/color] %s" % [race.get("color", "#fff"), race.get("name", ""), other.role.capitalize()])
+	if other.hull != null:
+		lines.append("%s  ·  Hull %d / %d" % [other.hull.stats().get("name", "?"), roundi(other.hull_hp), roundi(other.hull_hp_max)])
+	var weapon_names: Array[String] = []
+	for weapon in other.weapons:
+		weapon_names.append(str(weapon.stats().get("name", "?")))
+	lines.append("Weapons: %s" % (", ".join(weapon_names) if not weapon_names.is_empty() else "none"))
+	if other.bounty > 0:
+		lines.append("Bounty: [color=#80ff99]%s[/color]" % UiStyle.credits(other.bounty))
+	lines.append(_distance_text(ship, other.position))
+	if other.target_kind == Combat.TARGET_SHIP and other.target_id == ship.id:
+		lines.append("[color=#ff6b5b]It is attacking you![/color]")
+	if Combat.is_protected(galaxy, other):
+		lines.append("[color=#9aa8c8]Protected by the defenses of the planet it orbits.[/color]")
+	elif not other.is_pirate():
+		lines.append("[color=#9aa8c8]A peaceful ship. The Ranger Corps doesn't allow attacking it.[/color]")
+	return "\n".join(lines)
+
+
+func _asteroid_text(ship: ShipData, asteroid: AsteroidData) -> String:
+	return "[font_size=18][b]Asteroid[/b][/font_size]\nRock %d / %d\nBreaks into about %d minerals\n%s\n[color=#9aa8c8]Shoot it, then pick up the minerals with your gripper.[/color]" % [
+		roundi(asteroid.hp), roundi(asteroid.hp_max), asteroid.minerals, _distance_text(ship, asteroid.position())]
+
+
+func _loot_text(ship: ShipData, container: LootData) -> String:
+	var lines: Array[String] = ["[font_size=18][b]Cargo container[/b][/font_size]"]
+	for good_id: String in container.cargo:
+		lines.append("  %d %s" % [container.cargo[good_id], GameData.good(good_id).get("name", "?")])
+	lines.append("Drifts away in %d day%s" % [container.days_left, "" if container.days_left == 1 else "s"])
+	lines.append("Distance %.0f" % ship.position.distance_to(container.position))
+	lines.append("[color=#9aa8c8]Fly within %.0f to pick it up with your gripper.[/color]" % Equipment.gripper_range(ship))
+	return "\n".join(lines)
+
+
+## "Distance 230 (in range)" for the player's weapons.
+func _distance_text(ship: ShipData, at: Vector2) -> String:
+	var distance := ship.position.distance_to(at)
+	var weapon_range := Equipment.max_weapon_range(ship)
+	if weapon_range <= 0.0:
+		return "Distance %.0f" % distance
+	if distance <= weapon_range:
+		return "Distance %.0f [color=#80ff99](in weapon range)[/color]" % distance
+	return "Distance %.0f [color=#9aa8c8](weapon range %.0f)[/color]" % [distance, weapon_range]
+
+
+func _target_name(galaxy: GalaxyData, ship: ShipData) -> String:
+	if ship.target_kind == Combat.TARGET_SHIP:
+		return galaxy.get_ship(ship.target_id).name
+	return "an asteroid"
+
+
+## Shows Attack / Shoot / Cease fire for the selected pirate or asteroid.
+func _update_action_button(galaxy: GalaxyData, ship: ShipData) -> void:
+	_action_order = {}
+	var kind := ""
+	if not ship.in_hyperspace:
+		if _selection_kind == "ship":
+			var other := galaxy.get_ship(_selection_id)
+			if other != null and other.is_pirate() and not other.in_hyperspace and other.system_id == ship.system_id:
+				kind = Combat.TARGET_SHIP
+		elif _selection_kind == "asteroid":
+			var asteroid := galaxy.get_system(ship.system_id).get_asteroid(_selection_id)
+			if asteroid != null and asteroid.exists():
+				kind = Combat.TARGET_ASTEROID
+	if kind != "" and ship.target_kind == kind and ship.target_id == _selection_id:
+		_action_order = {"type": "cease_fire"}
+		_action_button.text = "Cease fire (T)"
+	elif kind != "":
+		_action_order = {"type": "attack", "target_kind": kind, "target_id": _selection_id}
+		_action_button.text = "Attack (T)" if kind == Combat.TARGET_SHIP else "Shoot asteroid (T)"
+	_action_button.visible = not _action_order.is_empty()
+	_action_button.disabled = TurnManager.is_resolving
+
+
+func _on_action_pressed() -> void:
+	if _action_order.is_empty() or TurnManager.is_resolving:
+		return
+	var order := _action_order
+	if TurnManager.submit_order(order) and order["type"] == "attack":
+		var ship := GameState.player_ship()
+		_add_message("Attacking %s. Your ship chases it and fires when in range. Press End Turn." % _target_name(GameState.galaxy, ship), "info")
 
 
 func _cargo_text(ship: ShipData) -> String:
@@ -478,6 +672,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		KEY_L:
 			_toggle_planet_screen()
+			get_viewport().set_input_as_handled()
+		KEY_T:
+			if not (_galaxy_map.visible or _pause_menu.visible or _planet_screen.is_open()):
+				_on_action_pressed()
 			get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
 			if _planet_screen.is_open():

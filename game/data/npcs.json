@@ -1,0 +1,22 @@
+{
+	"_comment": "NPC ships (docs/MASTER_DESIGN.md sections 6 and 12). Each loadout lists the hull, engine and weapons (ids from equipment.json); the race that built them is the ship's race. Pirates: 'min_danger' (0-1) is how far from the races' home systems a loadout starts to appear ('danger' = distance to the nearest home system / danger_distance), 'hull_hp' is the share of armor they start with (pirates are battle-worn), 'bounty' is what the Ranger Corps pays for destroying one, 'cargo' is [min, max] units of goods they carry (part of it is left in the wreck, plus salvage). Traders: 'cargo' is [min, max] units of goods on board.",
+	"danger_distance": 30.0,
+	"detection_range": 500.0,
+	"give_up_range": 900.0,
+	"respawn_chance": 0.04,
+	"pirates": [
+		{ "id": "raider", "name": "Raider", "weight": 6, "min_danger": 0.0,
+			"hull": "courier", "engine": "pulse_drive", "weapons": ["pulse_laser"],
+			"hull_hp": 0.6, "bounty": 350, "cargo": [0, 8] },
+		{ "id": "marauder", "name": "Marauder", "weight": 3, "min_danger": 0.45,
+			"hull": "fighter", "engine": "pulse_drive", "weapons": ["pulse_laser", "scatter_cannon"],
+			"hull_hp": 0.6, "bounty": 900, "cargo": [0, 12] },
+		{ "id": "warlord", "name": "Warlord", "weight": 1, "min_danger": 0.75,
+			"hull": "heavy_fighter", "engine": "arc_drive", "weapons": ["beam_lance", "scatter_cannon", "dart_launcher"],
+			"hull_hp": 0.8, "bounty": 2200, "cargo": [5, 20] }
+	],
+	"traders": [
+		{ "id": "hauler", "name": "trader", "weight": 1,
+			"hull": "freighter", "engine": "spark_drive", "weapons": [], "cargo": [10, 60] }
+	]
+}

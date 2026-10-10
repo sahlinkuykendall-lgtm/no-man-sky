@@ -28,7 +28,7 @@ func _ready() -> void:
 	var title := UiStyle.make_label("PROJECT RANGER", 48, UiStyle.ACCENT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
-	var subtitle := UiStyle.make_label("Prototype: Milestone 3 (Ships & Gear)", 15, UiStyle.TEXT_DIM)
+	var subtitle := UiStyle.make_label("Prototype: Milestone 4 (Space Combat)", 15, UiStyle.TEXT_DIM)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(subtitle)
 	column.add_child(HSeparator.new())

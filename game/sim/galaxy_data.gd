@@ -5,7 +5,8 @@ extends RefCounted
 
 ## Version 2 added markets, credits and cargo (Milestone 2).
 ## Version 3 added hulls and equipment (Milestone 3).
-const SAVE_VERSION := 3
+## Version 4 added weapons, pirates, asteroids and loot (Milestone 4).
+const SAVE_VERSION := 4
 
 var galaxy_seed: int = 0
 var day: int = 1
@@ -24,6 +25,14 @@ func add_ship(ship: ShipData) -> ShipData:
 	ships.append(ship)
 	_ship_index[ship.id] = ship
 	return ship
+
+
+## Takes a ship out of the galaxy (it was destroyed or left for good).
+func remove_ship(ship_id: int) -> void:
+	var ship := get_ship(ship_id)
+	if ship != null:
+		ships.erase(ship)
+		_ship_index.erase(ship_id)
 
 
 func get_ship(ship_id: int) -> ShipData:
@@ -94,6 +103,8 @@ static func from_dict(d: Dictionary) -> GalaxyData:
 		_upgrade_from_version_1(g)
 	if version < 3:
 		_upgrade_from_version_2(g)
+	if version < 4:
+		_upgrade_from_version_3(g)
 	# Recompute stats from equipment, so balance changes in equipment.json reach old saves.
 	for ship in g.ships:
 		Equipment.apply_stats(ship)
@@ -116,3 +127,21 @@ static func _upgrade_from_version_2(g: GalaxyData) -> void:
 		var fuel := player.fuel
 		Equipment.give_starting_kit(player, player.race_id)
 		player.fuel = minf(fuel, player.fuel_max)
+
+
+## Saves from Milestones 1-3 had no combat: the player gets a gripper and a laser,
+## old NPC traders are replaced by armed-and-armored ones, and pirates and asteroid
+## belts are added.
+static func _upgrade_from_version_3(g: GalaxyData) -> void:
+	var player := g.player_ship()
+	if player != null and player.hull != null:
+		if player.gripper == null:
+			player.gripper = ItemData.make(Equipment.STARTING_GRIPPER, player.race_id)
+		if player.weapons.is_empty():
+			player.weapons.append(ItemData.make(Equipment.STARTING_WEAPON, player.race_id))
+	for ship in g.ships.duplicate():
+		if not ship.is_player:
+			g.remove_ship(ship.id)
+	for system in g.systems:
+		GalaxyGenerator.make_asteroid_belt(g.galaxy_seed, system)
+	NpcSpawner.populate(g)

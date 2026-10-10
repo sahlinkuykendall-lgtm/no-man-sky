@@ -66,6 +66,42 @@ func _run() -> void:
 	await _shot("06_galaxy_map")
 	hud.call("_toggle_map")
 
+	# Combat: a pirate shows up next to us. Zoom in, look at it, attack it.
+	var space_view: Node = main.get_node("Game").get_child(0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var pirate := NpcSpawner.spawn_pirate(galaxy, galaxy.get_system(ship.system_id), rng, false)
+	for loadout: Dictionary in GameData.npcs()["pirates"]:
+		if loadout["id"] == "marauder":
+			NpcSpawner.equip(pirate, loadout, pirate.race_id)
+	pirate.hull_hp = 45.0
+	pirate.position = ship.position + Vector2(260, -90)
+	pirate.heading = PI
+	space_view.call("_sync_ship_nodes")
+	space_view.call("_apply_animation", 1.0)
+	(space_view.get("_camera") as Camera3D).size = 32.0
+	space_view.call("_center_on_player")
+	root.get_node("EventBus").selection_changed.emit("ship", pirate.id)
+	await _frames(5)
+	await _shot("08_pirate_info")
+	hud.call("_on_action_pressed")
+	for i in 2:
+		turn_manager.end_turn()
+		await create_timer(0.5).timeout
+		space_view.call("_center_on_player")
+		await _shot("09_combat_%d" % i)
+		await create_timer(0.7).timeout
+	pirate.hull_hp = 4.0
+	turn_manager.end_turn()
+	await create_timer(0.85).timeout
+	await _shot("10_explosion")
+	await create_timer(0.6).timeout
+	var loot_system := galaxy.get_system(ship.system_id)
+	if not loot_system.loot.is_empty():
+		root.get_node("EventBus").selection_changed.emit("loot", loot_system.loot[0].id)
+	await _frames(5)
+	await _shot("11_loot")
+
 	var neighbour := -1
 	for other in galaxy.systems:
 		var d := galaxy.distance_between(ship.system_id, other.id)

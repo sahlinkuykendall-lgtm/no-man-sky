@@ -19,7 +19,7 @@ const EVENT_ARRIVED_POINT := "arrived_point"
 const EVENT_ENTERED_HYPERSPACE := "entered_hyperspace"
 const EVENT_ARRIVED_SYSTEM := "arrived_system"
 const EVENT_JUMP_FAILED := "jump_failed"
-# Trading and market events are listed in Trade and Economy.
+# Trading, market, shipyard and combat events are listed in Trade, Economy, Shipyard and Combat.
 
 
 ## Gives a ship a new order. Returns "" on success, or a message explaining why not.
@@ -32,7 +32,10 @@ const EVENT_JUMP_FAILED := "jump_failed"
 ##         {"type": "sell", "good_id": String, "quantity": int}
 ##         {"type": "refuel"}
 ##         {"type": "buy_equipment", "type_id": String}  (at a planet's shipyard)
+##         {"type": "sell_weapon", "index": int}
 ##         {"type": "repair"}
+##         {"type": "attack", "target_kind": "ship" or "asteroid", "target_id": int}
+##         {"type": "cease_fire"}
 static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, events: Array[Dictionary] = []) -> String:
 	if ship.in_hyperspace:
 		return "Can't change course while in hyperspace."
@@ -48,9 +51,16 @@ static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, e
 			return Shipyard.buy_item(galaxy, ship, str(order.get("type_id", "")), events)
 		"repair":
 			return Shipyard.repair(galaxy, ship, events)
+		"sell_weapon":
+			return Shipyard.sell_weapon(galaxy, ship, int(order.get("index", -1)), events)
+		"attack":
+			return _order_attack(galaxy, ship, str(order.get("target_kind", "")), int(order.get("target_id", -1)))
+		"cease_fire":
+			ship.clear_target()
 		"move_to_point":
 			var point: Vector2 = order.get("point", ship.position)
 			ship.clear_course()
+			ship.pursue = false # Keep shooting at the target (if any), but stop chasing it.
 			ship.orbiting_planet_id = -1
 			ship.destination = point
 			ship.has_destination = true
@@ -59,6 +69,7 @@ static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, e
 			if planet == null:
 				return "Unknown planet."
 			ship.clear_course()
+			ship.pursue = false
 			if ship.orbiting_planet_id == planet.id:
 				return "" # Already parked there.
 			ship.orbiting_planet_id = -1
@@ -77,13 +88,43 @@ static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, e
 			if distance * FUEL_PER_PARSEC > ship.fuel:
 				return "Not enough fuel to reach %s (need %.1f, have %.1f). Buy fuel at an inhabited planet." % [target.name, distance * FUEL_PER_PARSEC, ship.fuel]
 			ship.clear_course()
+			ship.pursue = false
 			ship.orbiting_planet_id = -1
 			ship.jump_target_system_id = target_id
 			ship.has_destination = true
 		"stop":
 			ship.clear_course()
+			ship.pursue = false
 		_:
 			return "Unknown order."
+	return ""
+
+
+## Sets the ship's weapons on a target and flies after it.
+static func _order_attack(galaxy: GalaxyData, ship: ShipData, target_kind: String, target_id: int) -> String:
+	if ship.weapons.is_empty():
+		return "You have no weapons. Buy one at a shipyard."
+	var system := galaxy.get_system(ship.system_id)
+	match target_kind:
+		Combat.TARGET_SHIP:
+			var other := galaxy.get_ship(target_id)
+			if other == null or other == ship or other.in_hyperspace or other.system_id != ship.system_id:
+				return "That ship isn't here."
+			if not ship.is_pirate() and not other.is_pirate():
+				return "The Ranger Corps doesn't allow attacks on peaceful ships."
+			if Combat.is_protected(galaxy, other):
+				return "%s is protected by the defenses of the planet it orbits." % other.name
+		Combat.TARGET_ASTEROID:
+			var asteroid := system.get_asteroid(target_id)
+			if asteroid == null or not asteroid.exists():
+				return "That asteroid isn't here."
+		_:
+			return "Unknown target."
+	ship.clear_course()
+	ship.orbiting_planet_id = -1
+	ship.target_kind = target_kind
+	ship.target_id = target_id
+	ship.pursue = true
 	return ""
 
 
@@ -94,12 +135,15 @@ static func resolve_turn(galaxy: GalaxyData) -> Array[Dictionary]:
 	for system in galaxy.systems:
 		for planet in system.planets:
 			planet.advance(1)
+	Combat.daily_upkeep(galaxy)
 	Economy.daily_update(galaxy, events)
 	for ship in galaxy.ships:
 		if not ship.is_player:
-			NpcBrain.think(galaxy, ship)
+			NpcBrain.think(galaxy, ship, events)
 	for ship in galaxy.ships:
 		_resolve_ship(galaxy, ship, events)
+	Combat.resolve(galaxy, events) # Everyone has moved: now the weapons fire.
+	NpcSpawner.daily(galaxy)
 	return events
 
 
@@ -145,6 +189,9 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 		ship.position = orbited.position() + ship.orbit_offset
 		_service_at_planet(ship, orbited)
 		return
+	if ship.pursue and Combat.target_exists(galaxy, ship):
+		_chase_target(galaxy, ship, events)
+		return
 	if not ship.has_destination:
 		return
 
@@ -175,7 +222,8 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 		ship.orbiting_planet_id = planet.id
 		ship.clear_course()
 		events.append({"type": EVENT_ARRIVED_PLANET, "ship_id": ship.id, "planet_id": planet.id})
-		Trade.police_scan(galaxy, ship, planet, events)
+		if ship.is_player: # NPC police arrive in Milestone 5.
+			Trade.police_scan(galaxy, ship, planet, events)
 		_service_at_planet(ship, planet)
 	elif ship.jump_target_system_id >= 0:
 		ship.position = target
@@ -184,6 +232,20 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 		ship.position = target
 		ship.clear_course()
 		events.append({"type": EVENT_ARRIVED_POINT, "ship_id": ship.id})
+
+
+## Flies toward the ship's target, stopping once it is comfortably in weapon range.
+static func _chase_target(galaxy: GalaxyData, ship: ShipData, events: Array[Dictionary]) -> void:
+	var target := Combat.target_position(galaxy, ship)
+	var to_target := target - ship.position
+	var distance := to_target.length()
+	if distance > 0.001:
+		ship.heading = to_target.angle()
+	var gap := distance - Combat.engage_distance(ship)
+	if gap <= 0.0:
+		return # Close enough: hold position and shoot.
+	_wear(ship, "wear_per_flight_day", events)
+	ship.position += to_target / distance * minf(gap, ship.speed)
 
 
 static func _enter_hyperspace(galaxy: GalaxyData, ship: ShipData, events: Array[Dictionary]) -> void:

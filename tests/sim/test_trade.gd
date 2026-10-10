@@ -15,7 +15,7 @@ func test_player_starts_with_money_and_an_empty_hold() -> void:
 	var galaxy := _galaxy()
 	var ship := galaxy.player_ship()
 	assert_eq(ship.credits, GalaxyGenerator.PLAYER_START_CREDITS)
-	assert_eq(ship.cargo_capacity, Equipment.cargo_space(ship.hull, ship.engine, ship.fuel_tank))
+	assert_eq(ship.cargo_capacity, Equipment.cargo_space(ship.hull, ship.equipment()))
 	assert_true(ship.cargo_capacity >= 50, "starting hold too small")
 	assert_eq(ship.cargo_used(), 0)
 	assert_true(_market(galaxy) != null, "player should start at a planet with a market")

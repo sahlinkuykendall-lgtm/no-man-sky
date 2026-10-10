@@ -8,8 +8,11 @@ extends Node3D
 ## Coordinates: the simulation is 2D (x, y). In 3D that becomes (x, 0, y) * WORLD_SCALE,
 ## so the flat "space plane" is the XZ plane and +y in the simulation points down the screen.
 ##
-## Controls: left click = fly to point / planet, right-drag or WASD = move camera,
-## mouse wheel = zoom, F = center on your ship.
+## Controls: left click = fly to point / planet / cargo container, or select a ship or
+## asteroid; right-drag or WASD = move camera; mouse wheel = zoom; F = center on your ship.
+##
+## Combat (Milestone 4) is shown while the turn animates: after the ships have moved, shots
+## fly, damage numbers float up and destroyed ships and asteroids explode.
 
 const WORLD_SCALE := 0.05 ## Simulation units -> 3D units.
 const CAMERA_PITCH_DEG := -62.0
@@ -18,6 +21,11 @@ const ZOOM_MAX := 170.0
 const KEY_PAN_SPEED := 0.9 ## Screen-heights per second.
 const LABEL_SCALE := 0.00042 ## Label size relative to the zoom, so text stays readable.
 const SHIP_PICK_RADIUS := 30.0 ## Simulation units.
+const LOOT_PICK_RADIUS := 25.0
+const ASTEROID_VISUAL_SCALE := 1.6 ## Asteroids are drawn a bit bigger than they are, to be seen.
+## When combat effects play, as a share of the turn animation.
+const SHOTS_START := 0.45
+const EXPLOSION_AT := 0.85
 
 const COLOR_ORBIT := Color(0.35, 0.45, 0.7, 0.35)
 const COLOR_BOUNDARY := Color(0.65, 0.35, 0.95, 0.4)
@@ -25,6 +33,13 @@ const COLOR_COURSE := Color(0.45, 1.0, 0.6, 0.9)
 const COLOR_JUMP_COURSE := Color(0.75, 0.5, 1.0, 0.9)
 const COLOR_SELECTION := Color(1.0, 0.9, 0.35)
 const COLOR_PLAYER := Color(0.7, 0.95, 1.0)
+const COLOR_PIRATE := Color(1.0, 0.3, 0.25)
+const COLOR_TARGET := Color(1.0, 0.3, 0.25)
+const COLOR_RANGE := Color(1.0, 0.4, 0.35, 0.3)
+const COLOR_LOOT := Color(1.0, 0.85, 0.3)
+const COLOR_ASTEROID := Color(0.55, 0.5, 0.45)
+const COLOR_BELT := Color(0.6, 0.5, 0.4, 0.18)
+const SHOT_COLORS := {"energy": Color(0.4, 1.0, 1.0), "fragment": Color(1.0, 0.7, 0.3), "missile": Color(1.0, 0.45, 0.9)}
 
 var _camera_pivot: Node3D
 var _camera: Camera3D
@@ -36,6 +51,8 @@ var _system_id: int = -1
 var _showing_hyperspace: bool = false
 var _planet_nodes: Dictionary = {} ## planet id -> Node3D
 var _ship_nodes: Dictionary = {} ## ship id -> Node3D
+var _asteroid_nodes: Dictionary = {} ## asteroid id -> Node3D
+var _loot_nodes: Dictionary = {} ## container id -> Node3D
 var _labels: Array[Label3D] = []
 var _label_offsets: Dictionary = {} ## Label3D -> base offset (3D units below its object)
 
@@ -43,6 +60,9 @@ var _course_mesh: ImmediateMesh
 var _destination_marker: MeshInstance3D
 var _days_label: Label3D
 var _selection_ring: MeshInstance3D
+var _target_ring: MeshInstance3D ## Red ring around what the player is attacking.
+var _range_circle: MeshInstance3D ## The player's longest weapon range.
+var _shot_mesh: ImmediateMesh ## Laser beams, bullets and missiles of the current turn.
 var _selection_kind: String = ""
 var _selection_id: int = -1
 
@@ -51,6 +71,14 @@ var _animating: bool = false
 var _anim_elapsed: float = 0.0
 var _from_planet_angles: Dictionary = {} ## planet id -> angle
 var _from_ships: Dictionary = {} ## ship id -> {"position", "heading", "orbiting"}
+var _from_asteroid_angles: Dictionary = {} ## asteroid id -> angle
+var _anim_t: float = 1.0 ## How far the turn animation is (0..1, not smoothed).
+var _shots: Array[Dictionary] = [] ## Combat.EVENT_SHOT events of this turn, in this system.
+## Ships destroyed this turn, shown until they explode. ship id -> {"node", "from", "to"}
+var _wrecks: Dictionary = {}
+var _breaking_asteroids: Dictionary = {} ## asteroid id -> true, until its explosion
+## Goes up every time the system is rebuilt, so delayed effects of an old system are skipped.
+var _generation: int = 0
 
 var _dragging: bool = false
 
@@ -162,6 +190,22 @@ func _build_course_visuals() -> void:
 	_selection_ring.visible = false
 	add_child(_selection_ring)
 
+	_target_ring = _make_ring(1.0, 1.18, COLOR_TARGET)
+	_target_ring.visible = false
+	add_child(_target_ring)
+
+	_range_circle = MeshInstance3D.new()
+	_range_circle.mesh = _circle_mesh(1.0, COLOR_RANGE, true)
+	_range_circle.material_override = _line_material()
+	_range_circle.visible = false
+	add_child(_range_circle)
+
+	_shot_mesh = ImmediateMesh.new()
+	var shots := MeshInstance3D.new()
+	shots.mesh = _shot_mesh
+	shots.material_override = _line_material()
+	add_child(shots)
+
 
 func _rebuild() -> void:
 	if _system_root:
@@ -171,8 +215,15 @@ func _rebuild() -> void:
 	add_child(_system_root)
 	_planet_nodes.clear()
 	_ship_nodes.clear()
+	_asteroid_nodes.clear()
+	_loot_nodes.clear()
+	_wrecks.clear()
+	_breaking_asteroids.clear()
+	_shots.clear()
+	_generation += 1
 	_forget_old_labels()
 	_animating = false
+	_anim_t = 1.0
 	_on_selection_changed("", -1)
 
 	var ship := GameState.player_ship()
@@ -190,7 +241,9 @@ func _rebuild() -> void:
 	for planet in system.planets:
 		_build_planet(planet)
 	_build_circle(system.jump_radius, COLOR_BOUNDARY, true)
+	_build_asteroids(system)
 	_sync_ship_nodes()
+	_sync_loot_nodes()
 	_apply_animation(1.0)
 	_camera_pivot.position = to_world(ship.position)
 	_camera.size = clampf(system.jump_radius * WORLD_SCALE * 1.15, ZOOM_MIN, ZOOM_MAX)
@@ -255,6 +308,13 @@ func _build_planet(planet: PlanetData) -> void:
 
 
 func _build_circle(sim_radius: float, color: Color, dashed: bool) -> void:
+	var instance := MeshInstance3D.new()
+	instance.mesh = _circle_mesh(sim_radius, color, dashed)
+	instance.material_override = _line_material()
+	_system_root.add_child(instance)
+
+
+func _circle_mesh(sim_radius: float, color: Color, dashed: bool) -> ImmediateMesh:
 	var mesh := ImmediateMesh.new()
 	var segments := 128
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
@@ -268,15 +328,57 @@ func _build_circle(sim_radius: float, color: Color, dashed: bool) -> void:
 		mesh.surface_set_color(color)
 		mesh.surface_add_vertex(to_world(b))
 	mesh.surface_end()
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = _line_material()
-	_system_root.add_child(instance)
+	return mesh
+
+
+## Lumpy grey rocks, plus a faint ring showing where the belt is.
+func _build_asteroids(system: StarSystemData) -> void:
+	if system.asteroids.is_empty():
+		return
+	var belt_radius := 0.0
+	for asteroid in system.asteroids:
+		belt_radius += asteroid.orbit_radius / system.asteroids.size()
+		var rock := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		var radius := asteroid.size * WORLD_SCALE * ASTEROID_VISUAL_SCALE
+		mesh.radius = radius
+		mesh.height = radius * 2.0
+		mesh.radial_segments = 6 # Few faces = rocky look.
+		mesh.rings = 3
+		var material := StandardMaterial3D.new()
+		material.albedo_color = COLOR_ASTEROID
+		material.roughness = 1.0
+		mesh.material = material
+		rock.mesh = mesh
+		# Each rock gets its own squashed shape and tilt (from its id, so it never changes).
+		rock.scale = Vector3(1.0 + 0.1 * (asteroid.id % 3), 0.7 + 0.1 * (asteroid.id % 2), 0.8 + 0.12 * (asteroid.id % 4))
+		rock.rotation = Vector3(0.4 * asteroid.id, 1.3 * asteroid.id, 0.0)
+		_system_root.add_child(rock)
+		_asteroid_nodes[asteroid.id] = rock
+	_build_circle(belt_radius, COLOR_BELT, true)
+
+
+## A cargo container: a small glowing yellow box.
+func _make_loot_node() -> Node3D:
+	var box := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE * 0.5
+	var material := StandardMaterial3D.new()
+	material.albedo_color = COLOR_LOOT
+	material.emission_enabled = true
+	material.emission = COLOR_LOOT
+	material.emission_energy_multiplier = 1.2
+	mesh.material = material
+	box.mesh = mesh
+	box.rotation = Vector3(PI / 4.0, 0.0, PI / 4.0)
+	return box
 
 
 func _make_ship_node(ship: ShipData) -> Node3D:
 	var holder := Node3D.new()
 	var color := COLOR_PLAYER if ship.is_player else Color(GameData.race(ship.race_id).get("color", "#cccccc"))
+	if ship.is_pirate():
+		color = COLOR_PIRATE
 	var length := 1.5 if ship.is_player else 1.0
 
 	var hull := MeshInstance3D.new()
@@ -310,6 +412,8 @@ func _make_ship_node(ship: ShipData) -> Node3D:
 
 	if ship.is_player:
 		_add_label(holder, "You", COLOR_PLAYER, Vector3.ZERO, 0.9)
+	elif ship.is_pirate():
+		_add_label(holder, ship.name, COLOR_PIRATE, Vector3.ZERO, 0.6)
 	return holder
 
 
@@ -387,6 +491,24 @@ func _sync_ship_nodes() -> void:
 			_ship_nodes.erase(ship_id)
 
 
+## Creates nodes for new cargo containers and removes ones that were picked up or drifted off.
+func _sync_loot_nodes() -> void:
+	if _system_id < 0:
+		return
+	var present := {}
+	for container in GameState.galaxy.get_system(_system_id).loot:
+		present[container.id] = true
+		if not _loot_nodes.has(container.id):
+			var node := _make_loot_node()
+			node.position = to_world(container.position, 0.2)
+			_system_root.add_child(node)
+			_loot_nodes[container.id] = node
+	for loot_id: int in _loot_nodes.keys():
+		if not present.has(loot_id):
+			_loot_nodes[loot_id].queue_free()
+			_loot_nodes.erase(loot_id)
+
+
 func _on_turn_resolving() -> void:
 	_from_planet_angles.clear()
 	_from_ships.clear()
@@ -396,17 +518,22 @@ func _on_turn_resolving() -> void:
 		_from_planet_angles[planet.id] = planet.orbit_angle
 	for ship in GameState.galaxy.ships_in_system(_system_id):
 		_from_ships[ship.id] = {"position": ship.position, "heading": ship.heading, "orbiting": ship.orbiting_planet_id}
+	_from_asteroid_angles.clear()
+	for asteroid in GameState.galaxy.get_system(_system_id).asteroids:
+		_from_asteroid_angles[asteroid.id] = asteroid.orbit_angle
 
 
-func _on_turn_resolved(_day: int, _events: Array[Dictionary]) -> void:
+func _on_turn_resolved(_day: int, events: Array[Dictionary]) -> void:
 	var ship := GameState.player_ship()
 	if ship.in_hyperspace != _showing_hyperspace or (not ship.in_hyperspace and ship.system_id != _system_id):
 		_rebuild()
 		return
 	if _showing_hyperspace:
 		return
+	_prepare_combat_effects(events)
 	_sync_ship_nodes()
 	_anim_elapsed = 0.0
+	_anim_t = 0.0
 	_animating = true
 
 
@@ -439,6 +566,179 @@ func _apply_animation(t: float) -> void:
 		node.position = to_world(ship_position, 0.3)
 		node.rotation.y = heading_to_rotation(heading)
 
+	for wreck: Dictionary in _wrecks.values():
+		(wreck["node"] as Node3D).position = to_world((wreck["from"] as Vector2).lerp(wreck["to"], t), 0.3)
+
+	for asteroid in system.asteroids:
+		var angle := asteroid.orbit_angle
+		if t < 1.0 and _from_asteroid_angles.has(asteroid.id):
+			angle = lerp_angle(_from_asteroid_angles[asteroid.id], asteroid.orbit_angle, t)
+		var rock: Node3D = _asteroid_nodes[asteroid.id]
+		rock.position = to_world(asteroid.position_at_angle(angle))
+		rock.visible = asteroid.exists() or _breaking_asteroids.has(asteroid.id)
+
+
+# --- Combat effects ----------------------------------------------------------------
+
+## Sets up the shots, damage numbers and explosions of this turn's combat in this system.
+func _prepare_combat_effects(events: Array[Dictionary]) -> void:
+	_shots.clear()
+	_labels.assign(_labels.filter(func(label: Variant) -> bool: return is_instance_valid(label))) # Drop faded damage numbers.
+	var explode_in := TurnManager.animation_time() * EXPLOSION_AT
+	var damage_by_target := {} ## "kind:id" -> {"kind", "id", "damage", "to"}
+	for event in events:
+		if event.get("system_id", -1) != _system_id:
+			continue
+		match event["type"]:
+			Combat.EVENT_SHOT:
+				_shots.append(event)
+				var key := "%s:%d" % [event["target_kind"], event["target_id"]]
+				if not damage_by_target.has(key):
+					damage_by_target[key] = {"kind": event["target_kind"], "id": event["target_id"], "damage": 0, "to": event["to"]}
+				damage_by_target[key]["damage"] += int(event["damage"])
+			Combat.EVENT_SHIP_DESTROYED:
+				var ship_id: int = event["ship_id"]
+				if _ship_nodes.has(ship_id):
+					var from: Vector2 = _from_ships[ship_id]["position"] if _from_ships.has(ship_id) else event["position"]
+					_wrecks[ship_id] = {"node": _ship_nodes[ship_id], "from": from, "to": event["position"]}
+					_ship_nodes.erase(ship_id)
+				_later(explode_in, _explode_wreck.bind(ship_id, event["position"]))
+			Combat.EVENT_RESCUED:
+				_later(explode_in, _spawn_explosion.bind(to_world(event["position"], 0.3), 2.6, Color(1.0, 0.55, 0.2)))
+			Combat.EVENT_ASTEROID_DESTROYED:
+				_breaking_asteroids[event["asteroid_id"]] = true
+				_later(explode_in, _explode_asteroid.bind(event["asteroid_id"], event["position"]))
+	for hit: Dictionary in damage_by_target.values():
+		_later(TurnManager.animation_time() * 0.7, _spawn_damage_number.bind(hit))
+	_later(explode_in, _sync_loot_nodes) # Containers appear when the wrecks blow up.
+
+
+## Runs `callable` after `seconds`, unless the system was rebuilt in the meantime.
+func _later(seconds: float, callable: Callable) -> void:
+	var generation := _generation
+	get_tree().create_timer(seconds).timeout.connect(func() -> void:
+		if generation == _generation:
+			callable.call())
+
+
+func _explode_wreck(ship_id: int, at: Vector2) -> void:
+	if _wrecks.has(ship_id):
+		_wrecks[ship_id]["node"].queue_free()
+		_wrecks.erase(ship_id)
+	_spawn_explosion(to_world(at, 0.3), 2.6, Color(1.0, 0.55, 0.2))
+
+
+func _explode_asteroid(asteroid_id: int, at: Vector2) -> void:
+	_breaking_asteroids.erase(asteroid_id)
+	if _asteroid_nodes.has(asteroid_id):
+		at = to_sim(_asteroid_nodes[asteroid_id].position)
+	_spawn_explosion(to_world(at), 1.8, Color(0.85, 0.7, 0.5))
+
+
+## A glowing ball that grows and fades away.
+func _spawn_explosion(at: Vector3, size: float, color: Color) -> void:
+	var ball := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 1.0
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 4.0
+	mesh.material = material
+	ball.mesh = mesh
+	ball.position = at
+	ball.scale = Vector3.ONE * 0.3
+	_system_root.add_child(ball)
+	var tween := ball.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ball, "scale", Vector3.ONE * size, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(material, "albedo_color", Color(color, 0.0), 0.6)
+	tween.chain().tween_callback(ball.queue_free)
+
+
+## "-12" floating up from whatever was hit.
+func _spawn_damage_number(hit: Dictionary) -> void:
+	var node: Node3D = null
+	if hit["kind"] == Combat.TARGET_SHIP:
+		node = _ship_node(hit["id"])
+	elif _asteroid_nodes.has(hit["id"]):
+		node = _asteroid_nodes[hit["id"]]
+	var at := node.position if node != null else to_world(hit["to"])
+	var label := _make_label("-%d" % hit["damage"], Color(1.0, 0.45, 0.4), 0.0)
+	_label_offsets.erase(label) # It moves by itself.
+	label.font_size = 40
+	label.position = at + Vector3(0.0, 1.0, -_camera.size * 0.02)
+	_system_root.add_child(label)
+	var tween := label.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:z", label.position.z - _camera.size * 0.05, 1.1)
+	tween.tween_property(label, "modulate:a", 0.0, 1.1).set_delay(0.4)
+	tween.tween_property(label, "outline_modulate:a", 0.0, 1.1).set_delay(0.4)
+	tween.chain().tween_callback(label.queue_free)
+
+
+## The node of a ship, also while it is a wreck waiting to explode.
+func _ship_node(ship_id: int) -> Node3D:
+	if _ship_nodes.has(ship_id):
+		return _ship_nodes[ship_id]
+	if _wrecks.has(ship_id):
+		return _wrecks[ship_id]["node"]
+	return null
+
+
+## Draws this turn's shots. Each weapon fires a little after the previous one.
+##   energy = a beam that fades, fragment = a burst of bullets, missile = a slow streak.
+func _update_shots() -> void:
+	_shot_mesh.clear_surfaces()
+	if not _animating or _shots.is_empty():
+		return
+	var drawn := false
+	for k in _shots.size():
+		var shot := _shots[k]
+		var start := SHOTS_START + 0.05 * (k % 6)
+		var weapon_type: String = shot["weapon_type"]
+		var duration := 0.4 if weapon_type == "missile" else 0.3
+		var p := (_anim_t - start) / duration
+		if p < 0.0 or p > 1.0:
+			continue
+		var shooter := _ship_node(shot["ship_id"])
+		var from := shooter.position if shooter != null else to_world(shot["from"], 0.3)
+		var target: Node3D = null
+		if shot["target_kind"] == Combat.TARGET_SHIP:
+			target = _ship_node(shot["target_id"])
+		elif _asteroid_nodes.has(shot["target_id"]):
+			target = _asteroid_nodes[shot["target_id"]]
+		var to := target.position if target != null else to_world(shot["to"], 0.3)
+		var color: Color = SHOT_COLORS.get(weapon_type, Color.WHITE)
+		if not drawn:
+			_shot_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+			drawn = true
+		match weapon_type:
+			"energy":
+				_shot_line(from, to, Color(color, 1.0 - p * p))
+			"missile":
+				_shot_line(from.lerp(to, maxf(0.0, p - 0.15)), from.lerp(to, p), color)
+			_:
+				for pellet in 3:
+					var q := clampf(p * 1.3 - 0.15 * pellet, 0.0, 1.0)
+					_shot_line(from.lerp(to, maxf(0.0, q - 0.06)), from.lerp(to, q), color)
+	if drawn:
+		_shot_mesh.surface_end()
+
+
+## Three lines side by side, so shots are thick enough to see at any zoom.
+func _shot_line(a: Vector3, b: Vector3, color: Color) -> void:
+	var side := (b - a).cross(Vector3.UP).normalized() * _camera.size * 0.0012
+	for offset in [-side, Vector3.ZERO, side]:
+		_shot_mesh.surface_set_color(color)
+		_shot_mesh.surface_add_vertex(a + offset)
+		_shot_mesh.surface_set_color(color)
+		_shot_mesh.surface_add_vertex(b + offset)
+
 
 func _process(delta: float) -> void:
 	_pan_with_keys(delta)
@@ -448,12 +748,17 @@ func _process(delta: float) -> void:
 		_starfield.position.z = 0.0
 	if _animating:
 		_anim_elapsed += delta
-		var t := clampf(_anim_elapsed / TurnManager.animation_time(), 0.0, 1.0)
-		_apply_animation(smoothstep(0.0, 1.0, t))
-		if t >= 1.0:
+		_anim_t = clampf(_anim_elapsed / TurnManager.animation_time(), 0.0, 1.0)
+		_apply_animation(smoothstep(0.0, 1.0, _anim_t))
+		_update_shots()
+		if _anim_t >= 1.0:
 			_animating = false
+			_update_shots() # Clears the last shots.
+	for node: Node3D in _loot_nodes.values():
+		node.rotate_y(delta * 1.5) # Containers tumble slowly.
 	_update_course()
 	_update_selection_ring()
+	_update_combat_markers()
 	_update_labels()
 
 
@@ -508,6 +813,12 @@ func _update_selection_ring() -> void:
 	elif _selection_kind == "ship" and _ship_nodes.has(_selection_id):
 		target = _ship_nodes[_selection_id]
 		size = 1.2
+	elif _selection_kind == "asteroid" and _asteroid_nodes.has(_selection_id) and (_asteroid_nodes[_selection_id] as Node3D).visible:
+		target = _asteroid_nodes[_selection_id]
+		size = _asteroid_size(_selection_id) * 1.5
+	elif _selection_kind == "loot" and _loot_nodes.has(_selection_id):
+		target = _loot_nodes[_selection_id]
+		size = 0.7
 	elif _selection_kind == "star" and _system_id >= 0:
 		size = GameState.current_system().star_radius() * WORLD_SCALE * 1.4
 		_selection_ring.position = Vector3.ZERO
@@ -518,6 +829,39 @@ func _update_selection_ring() -> void:
 	if target:
 		_selection_ring.position = Vector3(target.position.x, 0.0, target.position.z)
 		_selection_ring.scale = Vector3.ONE * size
+
+
+## The red ring around the player's target and the circle showing their weapon range.
+func _update_combat_markers() -> void:
+	var ship := GameState.player_ship()
+	_target_ring.visible = false
+	_range_circle.visible = false
+	if ship == null or _showing_hyperspace or not _ship_nodes.has(ship.id):
+		return
+	var target: Node3D = null
+	var size := 1.4
+	if ship.target_kind == Combat.TARGET_SHIP:
+		target = _ship_node(ship.target_id)
+	elif ship.target_kind == Combat.TARGET_ASTEROID and _asteroid_nodes.has(ship.target_id):
+		target = _asteroid_nodes[ship.target_id]
+		size = _asteroid_size(ship.target_id) * 1.7
+	if target != null:
+		_target_ring.visible = true
+		_target_ring.position = Vector3(target.position.x, 0.0, target.position.z)
+		_target_ring.scale = Vector3.ONE * size
+	# Show the weapon range while aiming at (or looking at) something to shoot.
+	var weapon_range := Equipment.max_weapon_range(ship)
+	if weapon_range > 0.0 and (target != null or _selection_kind == "ship" or _selection_kind == "asteroid"):
+		var node: Node3D = _ship_nodes[ship.id]
+		_range_circle.visible = true
+		_range_circle.position = Vector3(node.position.x, 0.0, node.position.z)
+		_range_circle.scale = Vector3.ONE * weapon_range
+
+
+## Drawn radius of an asteroid (3D units).
+func _asteroid_size(asteroid_id: int) -> float:
+	var asteroid := GameState.current_system().get_asteroid(asteroid_id)
+	return asteroid.size * WORLD_SCALE * ASTEROID_VISUAL_SCALE if asteroid != null else 0.5
 
 
 ## Keeps text the same size on screen at every zoom level.
@@ -611,12 +955,23 @@ func _on_left_click(screen_position: Vector2) -> void:
 	var system := GameState.galaxy.get_system(_system_id)
 	var pick_slack := _camera.size / WORLD_SCALE * 0.012 # Easier to click when zoomed out.
 
-	# Ships first (they are small), then planets, then the star, else empty space.
+	# Small things first (ships, containers, asteroids), then planets, then the star,
+	# else empty space.
 	for ship in GameState.galaxy.ships_in_system(_system_id):
 		if _ship_nodes.has(ship.id) and to_sim(_ship_nodes[ship.id].position).distance_to(point) < SHIP_PICK_RADIUS + pick_slack:
 			if not ship.is_player:
 				EventBus.selection_changed.emit("ship", ship.id)
 				return
+	for container in system.loot:
+		if _loot_nodes.has(container.id) and container.position.distance_to(point) < LOOT_PICK_RADIUS + pick_slack:
+			EventBus.selection_changed.emit("loot", container.id)
+			TurnManager.submit_order({"type": "move_to_point", "point": container.position})
+			return
+	for asteroid in system.asteroids:
+		if asteroid.exists() and _asteroid_nodes.has(asteroid.id) and \
+				to_sim(_asteroid_nodes[asteroid.id].position).distance_to(point) < asteroid.size * ASTEROID_VISUAL_SCALE + 10.0 + pick_slack:
+			EventBus.selection_changed.emit("asteroid", asteroid.id)
+			return
 	for planet in system.planets:
 		if to_sim(_planet_nodes[planet.id].position).distance_to(point) < planet.radius + pick_slack:
 			EventBus.selection_changed.emit("planet", planet.id)

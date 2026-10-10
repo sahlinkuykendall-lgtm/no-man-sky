@@ -15,6 +15,9 @@ const JUMP_MARGIN := 160.0 ## How far past the last orbit the hyperspace boundar
 const BASE_ORBIT_SPEED := 0.22 ## Radians/day for a planet at REFERENCE_ORBIT.
 const REFERENCE_ORBIT := 200.0
 
+const ASTEROID_BELT_CHANCE := 0.45
+const ASTEROID_BELT_MARGIN := 75.0 ## Belts sit this far outside the last planet's orbit.
+
 const PLAYER_SHIP_NAME := "Ranger"
 const PLAYER_START_CREDITS := 2500
 
@@ -39,9 +42,10 @@ static func generate(galaxy_seed: int, system_count: int = DEFAULT_SYSTEM_COUNT,
 		system.race_id = races[_nearest(positions[i], homes, positions)].get("id", "")
 		system.is_home = homes.has(i)
 		_make_planets(rng, namer, system)
+		make_asteroid_belt(galaxy_seed, system)
 		galaxy.systems.append(system)
 
-	_spawn_npc_traders(rng, galaxy)
+	NpcSpawner.populate(galaxy)
 	_spawn_player(galaxy, player_race_id)
 	return galaxy
 
@@ -133,25 +137,27 @@ static func _populate(rng: RandomNumberGenerator, planet: PlanetData, race_id: S
 	Economy.init_market(planet)
 
 
-static func _spawn_npc_traders(rng: RandomNumberGenerator, galaxy: GalaxyData) -> void:
-	for system in galaxy.systems:
-		var inhabited := system.inhabited_planets()
-		if inhabited.is_empty():
-			continue
-		for i in rng.randi_range(2, 4):
-			var ship := ShipData.new()
-			ship.role = ShipData.ROLE_TRADER
-			ship.race_id = system.race_id
-			ship.name = "%s trader" % GameData.race(system.race_id).get("adjective", "Free")
-			ship.system_id = system.id
-			ship.speed = rng.randf_range(90.0, 140.0)
-			ship.cargo_capacity = 80
-			var home := inhabited[rng.randi_range(0, inhabited.size() - 1)]
-			ship.orbiting_planet_id = home.id
-			ship.orbit_offset = Vector2.from_angle(rng.randf() * TAU) * (home.radius + 18.0)
-			ship.position = home.position() + ship.orbit_offset
-			ship.idle_days = rng.randi_range(0, 3)
-			galaxy.add_ship(ship)
+## Some systems have a belt of asteroids just outside the last planet's orbit.
+## Uses its own random generator, so it can also add belts to old saves.
+static func make_asteroid_belt(galaxy_seed: int, system: StarSystemData) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([galaxy_seed, system.id, "asteroids"])
+	system.asteroids.clear()
+	if rng.randf() > ASTEROID_BELT_CHANCE:
+		return
+	var last_planet: PlanetData = system.planets.back()
+	var belt_radius := last_planet.orbit_radius + ASTEROID_BELT_MARGIN
+	for i in rng.randi_range(6, 10):
+		var asteroid := AsteroidData.new()
+		asteroid.id = i
+		asteroid.orbit_radius = belt_radius + rng.randf_range(-25.0, 25.0)
+		asteroid.orbit_angle = rng.randf() * TAU
+		asteroid.orbit_speed = BASE_ORBIT_SPEED * pow(REFERENCE_ORBIT / asteroid.orbit_radius, 1.5)
+		asteroid.size = rng.randf_range(6.0, 12.0)
+		asteroid.hp_max = roundf(asteroid.size * 5.0)
+		asteroid.hp = asteroid.hp_max
+		asteroid.minerals = roundi(asteroid.size * 0.5) + rng.randi_range(1, 3)
+		system.asteroids.append(asteroid)
 
 
 static func _spawn_player(galaxy: GalaxyData, player_race_id: String) -> void:

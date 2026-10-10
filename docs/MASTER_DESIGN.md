@@ -111,14 +111,24 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 38 | Market prices (M2) | Price = base × economy × tech level × government × race × a small fixed per-planet quirk × event × supply. Supply: fewer units in stock means a higher price. Each market buys 5% below and sells 5% above its middle price, so buying and selling straight back always loses money. Stock drifts back to normal by 8% of the gap per day. Numbers live in `game/data/goods.json`, `world.json` and `races.json` |
 | 39 | Contraband & black market (M2) | Illegal goods (by government, §11, plus race bans) can still be traded on the planet's **black market**: 40% pricier, less stock, and each deal risks a sting (fine + confiscation). Police scan ships that arrive at a planet with cargo (chance by government) and confiscate contraband with a fine. Anarchies scan nothing. Wanted status and karma come later (M5–M7) |
 | 40 | Lumari ban alcohol (M2) | Gives §10's "Alcohol: illegal on some worlds" a home: it's illegal on every Lumari world |
-| 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold. Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free until M5 gives them real trading |
+| 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold (about 62 t since M4, see #57). Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free until M5 gives them real trading |
 | 42 | Trading takes no time (M2) | Landing (L) on an inhabited planet you orbit opens its market. Trading is instant and costs no turn, like SR2. Credits live on the player's ship until pilots/characters are their own data (M15) |
 | 43 | Ship = hull + equipment (M3) | A ship is built from a **hull** plus one item per equipment slot. M3 has the hull, **engine** and **fuel tank**. Weapons (M4), radar, scanner, gripper, repair droid and shield (M4–M5) plug into the same system later. The ship's stats come from its items: speed, jump range and hyperspace speed from the engine, fuel capacity from the tank, armor (max hull HP) from the hull. Models and numbers live in `game/data/equipment.json` |
 | 44 | Weight vs cargo (M3) | Like SR2, a hull's **size** is shared between equipment and cargo: cargo space = hull size − weight of everything installed. Better engines are heavier, so you trade hold space for speed. A purchase is refused if the new cargo space would be smaller than what you carry |
-| 45 | Race of manufacture (M3) | Every shipyard sells only its own race's models, up to the planet's tech level. Each race changes price, weight, wear and armor (`races.json` → `manufacturing`): Veyari gear is pricey, light and long-lasting; Lumari gear is light; Skarn gear is cheap but wears fast; Gorruk hulls are tough but heavy; Human gear is the baseline. The player starts with a Courier hull, Spark Drive and Standard Tank built by their own race (a human pilot has speed 170, jump 20 pc, fuel 30 and a 60 t hold) |
+| 45 | Race of manufacture (M3) | Every shipyard sells only its own race's models, up to the planet's tech level. Each race changes price, weight, wear and armor (`races.json` → `manufacturing`): Veyari gear is pricey, light and long-lasting; Lumari gear is light; Skarn gear is cheap but wears fast; Gorruk hulls are tough but heavy; Human gear is the baseline. The player starts with a Courier hull, Spark Drive and Standard Tank built by their own race (a human pilot has speed 170, jump 20 pc, fuel 30 and a 60 t hold; since M4 also a Basic Gripper and a Pulse Laser, with a 62 t hold) |
 | 46 | Wear (M3) | Engines wear a little every day of flying and more on each hyperspace jump. Fuel tanks wear on jumps. Above 50% condition an item works at full power; below 50% it loses power, down to **half power at 0%**. It never breaks completely in M3. The hull's condition is its HP (damage arrives with combat in M4). The player gets a warning when an item drops below 50% |
-| 47 | Shipyard prices (M3) | Buying a new item **trades in** the old one for up to 60% of its price (40% of that is kept even when worn out). Repairing an item from 0% to 100% costs 35% of its price; hull repairs cost 8 cr per HP (times the maker's price factor). A pilot who can't afford a full repair pays for what they can, and the Ranger Corps patches the engine and tank up to 50% for free, so nobody is stranded |
+| 47 | Shipyard prices (M3) | Buying a new item **trades in** the old one for up to 60% of its price (40% of that is kept even when worn out). Repairing an item from 0% to 100% costs 35% of its price; hull repairs cost 8 cr per HP (3 cr since M4, see #57) (times the maker's price factor). A pilot who can't afford a full repair pays for what they can, and the Ranger Corps patches the engine and tank up to 50% for free, so nobody is stranded |
 | 48 | Hyperspace speed (M3) | Replaces the fixed "1 day per 8 pc" from Decision #37: transit speed now comes from the engine (8–14 pc/day) |
+| 49 | Weapons (M4) | Three types. **Energy** (lasers, beams): mid range, no ammo. **Fragment** (cannons): short range, and each shot also hits the target's allies within its splash radius for half damage. **Missiles**: longest range and hardest hits, but limited ammo, reloaded by *Repair*. Each weapon has a damage range (min–max), a range, a weight, and wears a little with every shot. A hull's **weapon slots** limit how many you carry. A new weapon goes into a free slot (no trade-in), and you sell weapons for their trade-in value. 10 weapons, tech 1–8, live in `equipment.json` |
+| 50 | Combat turns (M4) | Each ship has one target (a ship or an asteroid). After *Attack*, your ship chases the target until it is within 80% of its shortest weapon range, then holds there. After everyone has moved, every weapon in range fires once per day, and all ships fire at the same moment (a ship destroyed this turn still gets its last shots off). Damage is a random roll between min and max, seeded so it's the same on every computer. Skills (Accuracy vs Maneuverability), shields, per-weapon targets and shooting down missiles come later |
+| 51 | Safe orbits (M4) | Ships in orbit of an **inhabited planet** are protected by its defenses: they can't shoot or be shot. Traders under fire flee there, and so can you |
+| 52 | Death = rescue (M4) | First version of #33. When your hull reaches 0, the Ranger Corps tows the wreck to the nearest inhabited planet (in the same system if there is one, otherwise your race's home system). It costs **20% of your credits**, your cargo is left in a container where you were destroyed, and the hull is patched to 30%. Hardcore mode comes later |
+| 53 | Pirates & danger (M4) | Pirates come in three loadouts (Raider, Marauder, Warlord) in `game/data/npcs.json`. Each system has a normal number of pirates. Race home systems have none, and the farther a system is from every home system, the more and tougher its pirates (danger = distance to the nearest home ÷ 30 pc). Pirates hunt any non-pirate ship within 500 units that isn't in a safe orbit, and give up beyond 900. Destroyed pirates and traders are slowly replaced (4% chance per day per system); new pirates arrive at the hyperspace boundary |
+| 54 | Bounties, and no attacking traders yet (M4) | The Ranger Corps pays a **bounty** for every pirate the player helps destroy (350 / 900 / 2,200 cr). The player can't attack peaceful ships yet. Piracy as a player choice comes with karma and police in M5 |
+| 55 | Loot & gripper (M4) | Destroyed ships leave a **cargo container** with 40–80% of their cargo plus **Salvage** (a new good: scrap that industrial worlds pay well for). Containers drift away after 20 days. The **gripper** is a new equipment slot (every pilot starts with a Basic Gripper). At the end of each turn it picks up every container within its range, as far as the hold allows |
+| 56 | Asteroids (M4) | About 45% of systems have an asteroid belt beyond the last planet. Shoot a rock to break it into minerals (pick them up with the gripper). Broken rocks are replaced after 20–40 days |
+| 57 | Combat rebalance (M4) | The Courier grows to 90 t so the new starting gripper and laser still leave a human pilot a 62 t hold. Hull armor is raised (Courier 100 … Gunship 480). Hull repair drops to **3 cr per HP** (replaces the 8 cr in #47) because hulls now take damage often. Police scans only check the player for now (NPC traders carry nothing illegal) |
+| 58 | Save version 4 (M4) | Old saves are upgraded: the player gets a gripper and a Pulse Laser, systems get asteroid belts, and the NPC traders are replaced by new, equipped traders and pirates |
 
 ---
 
@@ -208,6 +218,16 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 - **Fleeing:** jump to hyperspace (you must be clear of the planet's gravity well), or land on a planet (enemies can't follow; hostile planets may refuse you).
 - **Combat items:** drugs and stims (temporary skill boosts), combat software and hacks (§9), and repair kits.
 
+### How the prototype works (Milestone 4)
+- **Attacking:** click a pirate (red ship with a name) or an asteroid, then press **Attack (T)** in the info panel. Your ship chases the target and fires every turn it is in range. The dashed red circle shows your longest weapon range, and the red ring marks your target. *Cease fire (T)* stops. You can still fly anywhere; a new course stops the chase.
+- **Each turn:** ships move, then all weapons in range fire at once (Decision #50). The turn animation shows beams, bullets and missiles, floating damage numbers and explosions. The log adds up the damage you dealt and took.
+- **Weapons:** Decision #49. Buy and sell them in the Shipyard tab. Missiles show their ammo in the *Your ship* panel.
+- **Pirates:** Decision #53. A pirate that spots you sends a warning ("…is coming for you!"), and Auto stops. Flee to an inhabited planet (safe orbit, Decision #51) or fight. Bounties: Decision #54.
+- **Loot and asteroids:** Decisions #55 and #56. Click a container to fly to it; the gripper picks it up when you're close.
+- **Losing:** Decision #52.
+- **NPC traders** now carry real equipment and cargo, flee to the nearest inhabited planet when shot, and leave wrecks with their cargo. They still don't really trade (M5).
+- **Not yet:** shields, radar, scanner, repair droids, skills, police and rangers fighting pirates, NPCs travelling between systems, hailing (all M5), and Ascendancy cores (M6).
+
 ---
 
 ## 7. Communication, Negotiation & Hailing
@@ -293,7 +313,7 @@ Each item has: **tech level (1–8)**, **manufacturer race** (affects price, qua
 ### How the prototype works (Milestone 3)
 - **Items built so far:** 6 hulls (Courier, Freighter, Fighter, Heavy Fighter, Bulk Hauler, Gunship; tech 1–7), 6 engines (Spark to Zenith Drive; tech 1–8) and 5 fuel tanks (Standard to Voidrunner; tech 1–8). Each comes in five versions, one per race (Decision #45). Weapon slots are listed on hulls but do nothing until M4.
 - **Shipyard:** every inhabited planet has one. **Land (L)** and open the **Shipyard** tab. It shows your ship (cargo space, hull HP, each item with its condition) with a *Repair all* button, and everything for sale with its stats, weight, price and what you would pay after the trade-in.
-- **Rules:** Decisions #43–#48. NPC ships don't have equipment yet; they keep fixed stats until M5 gives them real lives.
+- **Rules:** Decisions #43–#48. (Since M4, NPC ships are built from the same hulls and equipment.)
 - **Not yet:** the Technical skill (repair discounts), tuning modules, artifacts, buying extra ships and fleets. These come with their own milestones.
 
 ### Fleets & wingmen
@@ -344,7 +364,7 @@ Each item has: **tech level (1–8)**, **manufacturer race** (affects price, qua
 - **Credits (cr)**. Sinks: equipment, repairs, fuel, rent and property, hiring, fines, bribes, investments in stations (§14).
 
 ### How the prototype works (Milestone 2)
-- **Goods built so far:** the 8 base goods. The additions above arrive with the systems that produce them (planets M8–M9, combat M4, the Ascendancy M6).
+- **Goods built so far:** the 8 base goods, plus Salvage from wrecks (M4). The other additions above arrive with the systems that produce them (planets M8–M9, the Ascendancy M6).
 - **Markets:** every inhabited planet has one. Open it with **Land (L)** while in orbit. The market screen shows each good's typical price, the buy and sell price (green = a good deal), the market's stock and your hold.
 - **Prices** follow Decision #38. Producers (farm worlds for food and alcohol, industrial worlds for minerals, medicine, technology and weapons) sell cheaply. High-tech worlds sell technology, medicine and weapons for less. Rich democracies pay more for luxuries. Races have tastes (for example, the Gorruk make cheap weapons and pay a lot for alcohol). Prices move as you trade, so a route fades if you farm it, and recovers over a week or two.
 - **Market events:** famine, plague, bumper harvest, border war, miners' strike, tech boom and grand festival. Each lasts 5–20 days. The news reaches you if it happens within 40 pc. The planet info panel shows what is cheap, what pays well and what is illegal.
@@ -903,7 +923,7 @@ Content is defined in **data files**, so AIs can add it without code changes: go
 ### Testing
 - A built-in runner, `tests/run_tests.gd`, runs every `tests/**/test_*.gd` (each one extends `TestCase`). The economy, combat math and turn resolution must be tested.
 - A test also fails if it logs a script error, even when its asserts pass.
-- `tests/smoke_test.gd` plays the real game headlessly (including trading) and fails on any logged error.
+- `tests/smoke_test.gd` plays the real game headlessly (trading, the shipyard, flying, jumping and a pirate fight) and fails on any logged error.
 - GitHub Actions runs both on every push.
 
 ---
@@ -918,7 +938,7 @@ The order is chosen so each milestone produces something **playable** and later 
 | **M1 Galaxy & Turns** ✅ | Generate a galaxy and systems, isometric camera, fly the ship, End Turn, orbiting planets | Fly around a galaxy |
 | **M2 Trade** ✅ | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
 | **M3 Ships & Gear** ✅ | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
-| **M4 Space Combat** | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |
+| **M4 Space Combat** ✅ | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |
 | **M5 Living Galaxy** | NPC traders, pirates, police, rangers with AI; news ticker; hailing and negotiation | Galaxy runs without you |
 | **M6 Ascendancy War** | Invasion and liberation simulation, under-attack alerts, cores and Ranger Hub | The war plays out |
 | **M7 Missions** | Government missions (all space types), difficulty negotiation, mission log | SR2 loop complete |

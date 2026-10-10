@@ -1,17 +1,17 @@
 {
-	"_comment": "Ship hulls and equipment (docs/MASTER_DESIGN.md section 9). Shipyards sell items with a tech level up to the planet's, made by the planet's race (races.json 'manufacturing' changes price, weight, wear and armor). 'price' in credits, 'weight' in tons (equipment weight eats into the hull's cargo space). Wear is in condition points (100 = new): 'wear_per_flight_day' while flying inside a system, 'wear_per_jump' for each hyperspace jump. Weapons, shields, radar, scanner, gripper and repair droid arrive with Milestones 4-5.",
+	"_comment": "Ship hulls and equipment (docs/MASTER_DESIGN.md section 9). Shipyards sell items with a tech level up to the planet's, made by the planet's race (races.json 'manufacturing' changes price, weight, wear and armor). 'price' in credits, 'weight' in tons (equipment weight eats into the hull's cargo space). Wear is in condition points (100 = new): 'wear_per_flight_day' while flying inside a system, 'wear_per_jump' for each hyperspace jump. Weapons: 'type' is energy (accurate, no ammo), fragment (also hits other enemy ships within 'splash' units of the target) or missile (long range, limited 'ammo', reloaded at shipyards for 'ammo_price' each). 'damage' is [min, max] per shot (one shot per weapon per day), 'range' in system units, 'wear_per_shot' in condition points. Grippers pick up cargo containers within 'range'. Shields, radar, scanner and repair droids arrive with Milestone 5.",
 	"hulls": [
-		{ "id": "courier", "name": "Courier", "tech": 1, "price": 5000, "size": 80, "armor": 60, "weapon_slots": 1,
+		{ "id": "courier", "name": "Courier", "tech": 1, "price": 5000, "size": 90, "armor": 100, "weapon_slots": 1,
 			"description": "Small, cheap and nimble. Every ranger starts in one." },
-		{ "id": "freighter", "name": "Freighter", "tech": 2, "price": 15000, "size": 180, "armor": 80, "weapon_slots": 1,
+		{ "id": "freighter", "name": "Freighter", "tech": 2, "price": 15000, "size": 180, "armor": 130, "weapon_slots": 1,
 			"description": "A flying cargo hold. Lightly armored." },
-		{ "id": "fighter", "name": "Fighter", "tech": 3, "price": 13000, "size": 120, "armor": 150, "weapon_slots": 3,
+		{ "id": "fighter", "name": "Fighter", "tech": 3, "price": 13000, "size": 120, "armor": 240, "weapon_slots": 3,
 			"description": "Built for combat, with room for a little cargo." },
-		{ "id": "heavy_fighter", "name": "Heavy Fighter", "tech": 5, "price": 28000, "size": 160, "armor": 230, "weapon_slots": 4,
+		{ "id": "heavy_fighter", "name": "Heavy Fighter", "tech": 5, "price": 28000, "size": 160, "armor": 340, "weapon_slots": 4,
 			"description": "Thick armor and four weapon mounts." },
-		{ "id": "bulk_hauler", "name": "Bulk Hauler", "tech": 6, "price": 42000, "size": 320, "armor": 120, "weapon_slots": 2,
+		{ "id": "bulk_hauler", "name": "Bulk Hauler", "tech": 6, "price": 42000, "size": 320, "armor": 190, "weapon_slots": 2,
 			"description": "The trader's dream: an enormous hold." },
-		{ "id": "gunship", "name": "Gunship", "tech": 7, "price": 50000, "size": 230, "armor": 320, "weapon_slots": 5,
+		{ "id": "gunship", "name": "Gunship", "tech": 7, "price": 50000, "size": 230, "armor": 480, "weapon_slots": 5,
 			"description": "A warship for rangers who hunt the Ascendancy." }
 	],
 	"engines": [
@@ -39,5 +39,35 @@
 			"capacity": 75, "wear_per_flight_day": 0.0, "wear_per_jump": 0.5 },
 		{ "id": "voidrunner_tank", "name": "Voidrunner Tank", "tech": 8, "price": 16000, "weight": 22,
 			"capacity": 100, "wear_per_flight_day": 0.0, "wear_per_jump": 0.4 }
+	],
+	"grippers": [
+		{ "id": "basic_gripper", "name": "Basic Gripper", "tech": 1, "price": 500, "weight": 3, "range": 120,
+			"description": "Grabs cargo containers floating nearby." },
+		{ "id": "magnetic_gripper", "name": "Magnetic Gripper", "tech": 3, "price": 2000, "weight": 4, "range": 220,
+			"description": "Pulls in containers from further away." },
+		{ "id": "tractor_gripper", "name": "Tractor Gripper", "tech": 6, "price": 5500, "weight": 5, "range": 340,
+			"description": "A tractor beam that sweeps up everything in reach." }
+	],
+	"weapons": [
+		{ "id": "pulse_laser", "name": "Pulse Laser", "type": "energy", "tech": 1, "price": 1500, "weight": 5,
+			"damage": [8, 12], "range": 220, "wear_per_shot": 0.5 },
+		{ "id": "scatter_cannon", "name": "Scatter Cannon", "type": "fragment", "tech": 2, "price": 2600, "weight": 9,
+			"damage": [10, 16], "range": 160, "splash": 90, "wear_per_shot": 0.6 },
+		{ "id": "dart_launcher", "name": "Dart Launcher", "type": "missile", "tech": 2, "price": 3200, "weight": 7,
+			"damage": [20, 28], "range": 380, "ammo": 6, "ammo_price": 60, "wear_per_shot": 0.4 },
+		{ "id": "beam_lance", "name": "Beam Lance", "type": "energy", "tech": 3, "price": 4800, "weight": 7,
+			"damage": [13, 19], "range": 250, "wear_per_shot": 0.45 },
+		{ "id": "flak_battery", "name": "Flak Battery", "type": "fragment", "tech": 4, "price": 7000, "weight": 12,
+			"damage": [18, 26], "range": 170, "splash": 110, "wear_per_shot": 0.55 },
+		{ "id": "photon_beam", "name": "Photon Beam", "type": "energy", "tech": 5, "price": 9500, "weight": 9,
+			"damage": [21, 29], "range": 280, "wear_per_shot": 0.4 },
+		{ "id": "hornet_launcher", "name": "Hornet Launcher", "type": "missile", "tech": 5, "price": 11000, "weight": 10,
+			"damage": [34, 44], "range": 420, "ammo": 8, "ammo_price": 110, "wear_per_shot": 0.35 },
+		{ "id": "shard_cannon", "name": "Shard Cannon", "type": "fragment", "tech": 6, "price": 14000, "weight": 15,
+			"damage": [28, 40], "range": 180, "splash": 130, "wear_per_shot": 0.5 },
+		{ "id": "plasma_ray", "name": "Plasma Ray", "type": "energy", "tech": 7, "price": 17000, "weight": 11,
+			"damage": [32, 44], "range": 310, "wear_per_shot": 0.35 },
+		{ "id": "wraith_torpedo", "name": "Wraith Torpedo", "type": "missile", "tech": 8, "price": 23000, "weight": 14,
+			"damage": [60, 78], "range": 450, "ammo": 6, "ammo_price": 220, "wear_per_shot": 0.3 }
 	]
 }

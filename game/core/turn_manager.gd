@@ -66,13 +66,16 @@ func set_auto_advance(enabled: bool) -> void:
 
 func _player_is_travelling() -> bool:
 	var ship := GameState.player_ship()
-	return ship != null and (ship.has_destination or ship.in_hyperspace)
+	return ship != null and (ship.has_destination or ship.in_hyperspace or (ship.pursue and ship.has_target()))
 
 
-## Auto-advance stops whenever something happens to the player (arrival, jump, ...).
+## Auto-advance stops whenever something happens to the player (arrival, jump, being
+## shot at, ...).
 func _has_player_event(events: Array[Dictionary]) -> bool:
 	var ship := GameState.player_ship()
 	for event in events:
-		if event.get("ship_id") == ship.id:
+		if event.get("ship_id") == ship.id or event.get("killer_id") == ship.id:
+			return true
+		if event["type"] == Combat.EVENT_SHOT and event["target_kind"] == Combat.TARGET_SHIP and event["target_id"] == ship.id:
 			return true
 	return false

@@ -4,6 +4,7 @@ extends RefCounted
 
 const ROLE_PLAYER := "player"
 const ROLE_TRADER := "trader"
+const ROLE_PIRATE := "pirate"
 
 var id: int = -1
 var name: String = ""
@@ -15,12 +16,14 @@ var system_id: int = 0
 var position: Vector2 = Vector2.ZERO
 var heading: float = 0.0 ## Radians, direction the ship faces.
 
-# Hull and equipment. NPC ships don't have any yet (Milestone 5) and use the stats below
-# directly. For ships that do, Equipment.apply_stats() works the stats out from them.
+# Hull and equipment. Equipment.apply_stats() works the ship's stats out from them.
+# (A ship without a hull just keeps the stats below; only very old saves have those.)
 var hull: ItemData = null
 var engine: ItemData = null
 var fuel_tank: ItemData = null
-var hull_hp: float = 0.0 ## Hull damage arrives with combat (Milestone 4).
+var gripper: ItemData = null
+var weapons: Array[ItemData] = [] ## Up to the hull's number of weapon slots.
+var hull_hp: float = 0.0 ## The ship is destroyed when this reaches 0.
 
 # Ship stats.
 var speed: float = 150.0 ## System units per day.
@@ -50,11 +53,18 @@ var in_hyperspace: bool = false
 var jump_origin_system_id: int = -1
 var jump_days_left: int = 0
 
+# Combat. The target is what the weapons shoot at: "ship" or "asteroid" (or "" for none).
+var target_kind: String = ""
+var target_id: int = -1
+var pursue: bool = false ## Fly after the target to keep it in weapon range.
+var bounty: int = 0 ## Pirates: what the Ranger Corps pays for destroying this ship.
+
 # Simple NPC memory.
 var idle_days: int = 0
 
 
-## The item in a slot: "hull", "engine" or "fuel_tank" (null if empty).
+## The item in a single slot: "hull", "engine", "fuel_tank" or "gripper" (null if empty).
+## Weapons have several slots: see `weapons`.
 func slot(kind: String) -> ItemData:
 	match kind:
 		"hull":
@@ -63,6 +73,8 @@ func slot(kind: String) -> ItemData:
 			return engine
 		"fuel_tank":
 			return fuel_tank
+		"gripper":
+			return gripper
 	return null
 
 
@@ -74,6 +86,33 @@ func set_slot(kind: String, item: ItemData) -> void:
 			engine = item
 		"fuel_tank":
 			fuel_tank = item
+		"gripper":
+			gripper = item
+
+
+## Everything installed in the hull (engine, fuel tank, gripper and weapons).
+func equipment() -> Array[ItemData]:
+	var items: Array[ItemData] = []
+	for item in [engine, fuel_tank, gripper]:
+		if item != null:
+			items.append(item)
+	items.append_array(weapons)
+	return items
+
+
+func has_target() -> bool:
+	return target_kind != ""
+
+
+## Stops shooting (and chasing).
+func clear_target() -> void:
+	target_kind = ""
+	target_id = -1
+	pursue = false
+
+
+func is_pirate() -> bool:
+	return role == ROLE_PIRATE
 
 
 ## Total units of cargo on board.
@@ -109,6 +148,9 @@ func clear_course() -> void:
 
 
 func to_dict() -> Dictionary:
+	var weapon_dicts: Array = []
+	for weapon in weapons:
+		weapon_dicts.append(weapon.to_dict())
 	return {
 		"id": id,
 		"name": name,
@@ -128,6 +170,12 @@ func to_dict() -> Dictionary:
 		"hull": _item_to_dict(hull),
 		"engine": _item_to_dict(engine),
 		"fuel_tank": _item_to_dict(fuel_tank),
+		"gripper": _item_to_dict(gripper),
+		"weapons": weapon_dicts,
+		"target_kind": target_kind,
+		"target_id": target_id,
+		"pursue": pursue,
+		"bounty": bounty,
 		"cargo_capacity": cargo_capacity,
 		"credits": credits,
 		"cargo": cargo.duplicate(),
@@ -161,10 +209,16 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.jump_speed = float(d.get("jump_speed", 8.0))
 	s.hull_hp = float(d.get("hull_hp", 0.0))
 	s.hull_hp_max = float(d.get("hull_hp_max", 0.0))
-	for kind: String in ["hull", "engine", "fuel_tank"]:
+	for kind: String in ["hull", "engine", "fuel_tank", "gripper"]:
 		var item_dict: Variant = d.get(kind)
 		if item_dict is Dictionary:
 			s.set_slot(kind, ItemData.from_dict(item_dict))
+	for weapon_dict: Dictionary in d.get("weapons", []):
+		s.weapons.append(ItemData.from_dict(weapon_dict))
+	s.target_kind = str(d.get("target_kind", ""))
+	s.target_id = int(d.get("target_id", -1))
+	s.pursue = bool(d.get("pursue", false))
+	s.bounty = int(d.get("bounty", 0))
 	s.cargo_capacity = int(d.get("cargo_capacity", 0))
 	s.credits = int(d.get("credits", 0))
 	var hold: Dictionary = d.get("cargo", {})

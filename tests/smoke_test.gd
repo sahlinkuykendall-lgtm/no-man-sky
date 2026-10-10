@@ -1,6 +1,7 @@
 extends SceneTree
 ## Plays the real game headlessly for a while (menu -> new game -> trade -> shipyard -> fly -> jump ->
-## save/load -> back to menu) and fails if any script error or warning was logged.
+## fight a pirate -> pick up its wreck -> save/load -> back to menu) and fails if any script
+## error or warning was logged.
 ##
 ## Usage: godot --headless -s res://tests/smoke_test.gd
 
@@ -77,6 +78,12 @@ func _run() -> void:
 	shipyard.call("_on_repair")
 	await _frames(2)
 	_check(ship.engine.condition >= 99.9, "repair failed")
+	shipyard.call("_on_sell_weapon", 0)
+	await _frames(2)
+	_check(ship.weapons.is_empty(), "selling a weapon failed")
+	shipyard.call("_on_buy", "pulse_laser")
+	await _frames(2)
+	_check(ship.weapons.size() == 1, "buying a weapon failed")
 	planet_screen.call("show_tab", "market")
 	await _frames(2)
 	hud.call("_toggle_planet_screen")
@@ -106,6 +113,45 @@ func _run() -> void:
 		await _wait_until(func() -> bool: return not turn_manager.auto_advance and not turn_manager.is_resolving, 30.0)
 	_check(galaxy.player_ship().system_id == target, "never arrived in the target system")
 	_check(galaxy.player_ship().cargo_amount("food") > 0, "cargo got lost on the way")
+
+	# A raider shows up next to us. Select it, attack, and fight until one of us is done.
+	var space_view: Node = main.get_node("Game").get_child(0)
+	var system_here := galaxy.get_system(ship.system_id)
+	for other in galaxy.ships_in_system(system_here.id):
+		if other.is_pirate():
+			galaxy.remove_ship(other.id) # Only our raider, so the test always plays the same way.
+	system_here.pirate_limit = 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var pirate := NpcSpawner.spawn_pirate(galaxy, system_here, rng, false)
+	for loadout: Dictionary in GameData.npcs()["pirates"]:
+		if loadout["id"] == "raider":
+			NpcSpawner.equip(pirate, loadout, pirate.race_id)
+	pirate.hull_hp = 30.0 # Already battered: a short fight.
+	pirate.add_cargo("food", 5)
+	pirate.position = ship.position + Vector2(150, 0)
+	space_view.call("_sync_ship_nodes")
+	event_bus.selection_changed.emit("ship", pirate.id)
+	await _frames(2)
+	hud.call("_on_action_pressed")
+	_check(ship.target_id == pirate.id, "attack order failed")
+	var pirate_id := pirate.id
+	var fight_start: int = galaxy.day
+	while galaxy.get_ship(pirate_id) != null and galaxy.day < fight_start + 30 and ship.has_target():
+		turn_manager.end_turn()
+		await _wait_until(func() -> bool: return not turn_manager.is_resolving, 5.0)
+	_check(galaxy.get_ship(pirate_id) == null, "the raider was not destroyed")
+	await _frames(30) # Let the explosion play.
+
+	# Fly to the wreck's cargo container and pick it up with the gripper.
+	system_here = galaxy.get_system(ship.system_id)
+	if not system_here.loot.is_empty():
+		var container: LootData = system_here.loot[0]
+		var cargo_before := ship.cargo_used()
+		_check(turn_manager.submit_order({"type": "move_to_point", "point": container.position}), "flying to loot refused")
+		turn_manager.set_auto_advance(true)
+		await _wait_until(func() -> bool: return not turn_manager.auto_advance and not turn_manager.is_resolving, 30.0)
+		_check(ship.cargo_used() > cargo_before, "gripper picked nothing up")
 
 	# Click in space, save, load, and go back to the menu.
 	main.get_node("Game").get_child(0).call("_on_left_click", Vector2(300, 300))

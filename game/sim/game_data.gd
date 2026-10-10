@@ -61,6 +61,19 @@ static func fuel_tanks() -> Array:
 	return load_json("equipment.json").get("fuel_tanks", [])
 
 
+static func grippers() -> Array:
+	return load_json("equipment.json").get("grippers", [])
+
+
+static func weapons() -> Array:
+	return load_json("equipment.json").get("weapons", [])
+
+
+## NPC settings and loadouts (npcs.json).
+static func npcs() -> Dictionary:
+	return load_json("npcs.json")
+
+
 static func name_syllables() -> Dictionary:
 	return load_json("names.json")
 
@@ -101,23 +114,27 @@ static func market_event(id: String) -> Dictionary:
 	return find_by_id(market_events(), id)
 
 
+## Every list of items in equipment.json, by kind.
+static func items_by_kind() -> Dictionary:
+	return {"hull": hulls(), "engine": engines(), "fuel_tank": fuel_tanks(), "gripper": grippers(), "weapon": weapons()}
+
+
 ## A hull or piece of equipment from equipment.json, whatever its kind.
 static func item_type(id: String) -> Dictionary:
-	for entries: Array in [hulls(), engines(), fuel_tanks()]:
-		var entry := find_by_id(entries, id)
+	var lists := items_by_kind()
+	for kind: String in lists:
+		var entry := find_by_id(lists[kind], id)
 		if not entry.is_empty():
 			return entry
 	return {}
 
 
-## "hull", "engine", "fuel_tank", or "" if the id is unknown.
+## "hull", "engine", "fuel_tank", "gripper", "weapon", or "" if the id is unknown.
 static func item_kind(id: String) -> String:
-	if not find_by_id(hulls(), id).is_empty():
-		return "hull"
-	if not find_by_id(engines(), id).is_empty():
-		return "engine"
-	if not find_by_id(fuel_tanks(), id).is_empty():
-		return "fuel_tank"
+	var lists := items_by_kind()
+	for kind: String in lists:
+		if not find_by_id(lists[kind], id).is_empty():
+			return kind
 	return ""
 
 

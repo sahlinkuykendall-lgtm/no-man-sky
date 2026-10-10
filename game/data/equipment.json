@@ -1,0 +1,43 @@
+{
+	"_comment": "Ship hulls and equipment (docs/MASTER_DESIGN.md section 9). Shipyards sell items with a tech level up to the planet's, made by the planet's race (races.json 'manufacturing' changes price, weight, wear and armor). 'price' in credits, 'weight' in tons (equipment weight eats into the hull's cargo space). Wear is in condition points (100 = new): 'wear_per_flight_day' while flying inside a system, 'wear_per_jump' for each hyperspace jump. Weapons, shields, radar, scanner, gripper and repair droid arrive with Milestones 4-5.",
+	"hulls": [
+		{ "id": "courier", "name": "Courier", "tech": 1, "price": 5000, "size": 80, "armor": 60, "weapon_slots": 1,
+			"description": "Small, cheap and nimble. Every ranger starts in one." },
+		{ "id": "freighter", "name": "Freighter", "tech": 2, "price": 15000, "size": 180, "armor": 80, "weapon_slots": 1,
+			"description": "A flying cargo hold. Lightly armored." },
+		{ "id": "fighter", "name": "Fighter", "tech": 3, "price": 13000, "size": 120, "armor": 150, "weapon_slots": 3,
+			"description": "Built for combat, with room for a little cargo." },
+		{ "id": "heavy_fighter", "name": "Heavy Fighter", "tech": 5, "price": 28000, "size": 160, "armor": 230, "weapon_slots": 4,
+			"description": "Thick armor and four weapon mounts." },
+		{ "id": "bulk_hauler", "name": "Bulk Hauler", "tech": 6, "price": 42000, "size": 320, "armor": 120, "weapon_slots": 2,
+			"description": "The trader's dream: an enormous hold." },
+		{ "id": "gunship", "name": "Gunship", "tech": 7, "price": 50000, "size": 230, "armor": 320, "weapon_slots": 5,
+			"description": "A warship for rangers who hunt the Ascendancy." }
+	],
+	"engines": [
+		{ "id": "spark_drive", "name": "Spark Drive", "tech": 1, "price": 2000, "weight": 12,
+			"speed": 170, "jump_range": 20, "jump_speed": 8, "wear_per_flight_day": 0.15, "wear_per_jump": 2.0 },
+		{ "id": "pulse_drive", "name": "Pulse Drive", "tech": 2, "price": 4500, "weight": 15,
+			"speed": 200, "jump_range": 24, "jump_speed": 9, "wear_per_flight_day": 0.15, "wear_per_jump": 2.0 },
+		{ "id": "arc_drive", "name": "Arc Drive", "tech": 4, "price": 9000, "weight": 18,
+			"speed": 235, "jump_range": 28, "jump_speed": 10, "wear_per_flight_day": 0.12, "wear_per_jump": 1.8 },
+		{ "id": "surge_drive", "name": "Surge Drive", "tech": 5, "price": 16000, "weight": 22,
+			"speed": 270, "jump_range": 32, "jump_speed": 11, "wear_per_flight_day": 0.12, "wear_per_jump": 1.6 },
+		{ "id": "nova_drive", "name": "Nova Drive", "tech": 6, "price": 27000, "weight": 26,
+			"speed": 310, "jump_range": 37, "jump_speed": 12, "wear_per_flight_day": 0.1, "wear_per_jump": 1.5 },
+		{ "id": "zenith_drive", "name": "Zenith Drive", "tech": 8, "price": 42000, "weight": 30,
+			"speed": 350, "jump_range": 42, "jump_speed": 14, "wear_per_flight_day": 0.1, "wear_per_jump": 1.3 }
+	],
+	"fuel_tanks": [
+		{ "id": "standard_tank", "name": "Standard Tank", "tech": 1, "price": 800, "weight": 8,
+			"capacity": 30, "wear_per_flight_day": 0.0, "wear_per_jump": 0.6 },
+		{ "id": "long_range_tank", "name": "Long-Range Tank", "tech": 2, "price": 2200, "weight": 10,
+			"capacity": 40, "wear_per_flight_day": 0.0, "wear_per_jump": 0.6 },
+		{ "id": "expedition_tank", "name": "Expedition Tank", "tech": 4, "price": 5000, "weight": 13,
+			"capacity": 55, "wear_per_flight_day": 0.0, "wear_per_jump": 0.5 },
+		{ "id": "deep_range_tank", "name": "Deep-Range Tank", "tech": 6, "price": 9500, "weight": 17,
+			"capacity": 75, "wear_per_flight_day": 0.0, "wear_per_jump": 0.5 },
+		{ "id": "voidrunner_tank", "name": "Voidrunner Tank", "tech": 8, "price": 16000, "weight": 22,
+			"capacity": 100, "wear_per_flight_day": 0.0, "wear_per_jump": 0.4 }
+	]
+}

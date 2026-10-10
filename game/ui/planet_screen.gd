@@ -1,7 +1,8 @@
 class_name PlanetScreen
 extends Control
-## The screen you see after landing on an inhabited planet: the market (buy and sell goods)
-## and the fuel depot. Opened with "Land (L)" while in orbit. No time passes while it is open.
+## The screen you see after landing on an inhabited planet. Two tabs: the Market (buy and
+## sell goods) and the Shipyard (ShipyardPanel: hulls, equipment, repairs). Fuel is sold at
+## the bottom of both. Opened with "Land (L)" while in orbit. No time passes while it is open.
 ##
 ## Like every view, it only reads the simulation. Trades are sent as orders through
 ## TurnManager.submit_order(), exactly as a multiplayer client would send them.
@@ -12,6 +13,10 @@ var _planet: PlanetData = null
 var _title_label: RichTextLabel
 var _status_label: RichTextLabel
 var _refuel_button: Button
+var _market_tab_button: Button
+var _shipyard_tab_button: Button
+var _market_box: VBoxContainer
+var _shipyard: ShipyardPanel
 ## good id -> {"name": Label, "buy": Label, "sell": Label, "stock": Label, "hold": Label,
 ##             "buy_one": Button, "buy_max": Button, "sell_one": Button, "sell_all": Button}
 var _rows: Dictionary = {}
@@ -40,8 +45,20 @@ func _ready() -> void:
 
 	_title_label = _rich_label()
 	column.add_child(_title_label)
+	column.add_child(_build_tabs())
 	column.add_child(HSeparator.new())
-	column.add_child(_build_market_grid())
+
+	_market_box = VBoxContainer.new()
+	_market_box.add_theme_constant_override("separation", 10)
+	column.add_child(_market_box)
+	_market_box.add_child(_build_market_grid())
+	var hint := UiStyle.make_label("Prices move as you trade and recover over the next days. Buy where goods are cheap (green) and sell where they pay well (green).\nGoods marked BLACK MARKET are illegal here: pricier, every deal risks a fine, and police may scan ships that arrive.", 13, UiStyle.TEXT_DIM)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_market_box.add_child(hint)
+
+	_shipyard = ShipyardPanel.new()
+	_shipyard.visible = false
+	column.add_child(_shipyard)
 	column.add_child(HSeparator.new())
 
 	var footer := HBoxContainer.new()
@@ -54,12 +71,35 @@ func _ready() -> void:
 	footer.add_child(_refuel_button)
 	footer.add_child(UiStyle.make_button("Take off (Esc)", close, 140))
 
-	var hint := UiStyle.make_label("Prices move as you trade and recover over the next days. Buy where goods are cheap (green) and sell where they pay well (green).\nGoods marked BLACK MARKET are illegal here: pricier, every deal risks a fine, and police may scan ships that arrive.", 13, UiStyle.TEXT_DIM)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	column.add_child(hint)
-
 	EventBus.player_order_changed.connect(_refresh)
 	EventBus.galaxy_loaded.connect(close)
+
+
+func _build_tabs() -> HBoxContainer:
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	var group := ButtonGroup.new()
+	_market_tab_button = UiStyle.make_button("Market", show_tab.bind("market"), 140)
+	_shipyard_tab_button = UiStyle.make_button("Shipyard", show_tab.bind("shipyard"), 140)
+	for button: Button in [_market_tab_button, _shipyard_tab_button]:
+		button.toggle_mode = true
+		button.button_group = group
+		tabs.add_child(button)
+	_market_tab_button.button_pressed = true
+	return tabs
+
+
+## Switches between the "market" and "shipyard" tabs.
+func show_tab(tab: String) -> void:
+	_market_box.visible = tab == "market"
+	_shipyard.visible = tab == "shipyard"
+	_market_tab_button.set_pressed_no_signal(tab == "market")
+	_shipyard_tab_button.set_pressed_no_signal(tab == "shipyard")
+	_refresh()
+
+
+func current_tab() -> String:
+	return "shipyard" if _shipyard.visible else "market"
 
 
 func _build_market_grid() -> GridContainer:
@@ -114,6 +154,7 @@ func _rich_label() -> RichTextLabel:
 func open(planet: PlanetData) -> void:
 	_planet = planet
 	visible = true
+	_shipyard.show_planet(planet)
 	_refresh()
 
 
@@ -147,8 +188,11 @@ func _refresh() -> void:
 		close()
 		return
 	_title_label.text = _title_text()
-	for good: Dictionary in GameData.goods():
-		_refresh_row(ship, good)
+	if _market_box.visible:
+		for good: Dictionary in GameData.goods():
+			_refresh_row(ship, good)
+	else:
+		_shipyard.refresh()
 
 	_status_label.text = "Credits [b][color=#80ff99]%s[/color][/b]     Cargo %d / %d     Fuel %.1f / %.0f" % [
 		UiStyle.credits(ship.credits), ship.cargo_used(), ship.cargo_capacity, ship.fuel, ship.fuel_max]

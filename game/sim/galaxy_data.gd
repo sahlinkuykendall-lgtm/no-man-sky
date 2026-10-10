@@ -4,7 +4,8 @@ extends RefCounted
 ## Everything the save system and (later) the multiplayer server need lives here.
 
 ## Version 2 added markets, credits and cargo (Milestone 2).
-const SAVE_VERSION := 2
+## Version 3 added hulls and equipment (Milestone 3).
+const SAVE_VERSION := 3
 
 var galaxy_seed: int = 0
 var day: int = 1
@@ -88,15 +89,30 @@ static func from_dict(d: Dictionary) -> GalaxyData:
 	for ship_dict: Dictionary in d.get("ships", []):
 		g.add_ship(ShipData.from_dict(ship_dict))
 	g.next_ship_id = maxi(g.next_ship_id, int(d.get("next_ship_id", 0)))
-	if int(d.get("save_version", 1)) < 2:
+	var version := int(d.get("save_version", 1))
+	if version < 2:
 		_upgrade_from_version_1(g)
+	if version < 3:
+		_upgrade_from_version_2(g)
+	# Recompute stats from equipment, so balance changes in equipment.json reach old saves.
+	for ship in g.ships:
+		Equipment.apply_stats(ship)
 	return g
 
 
-## Saves from Milestone 1 had no markets, money or cargo hold.
+## Saves from Milestone 1 had no markets or money.
 static func _upgrade_from_version_1(g: GalaxyData) -> void:
 	Economy.ensure_markets(g)
 	var player := g.player_ship()
 	if player != null:
 		player.credits = GalaxyGenerator.PLAYER_START_CREDITS
-		player.cargo_capacity = GalaxyGenerator.PLAYER_CARGO_CAPACITY
+
+
+## Saves from Milestones 1-2 had no hull or equipment: give the player the starting kit
+## (keeping their fuel).
+static func _upgrade_from_version_2(g: GalaxyData) -> void:
+	var player := g.player_ship()
+	if player != null and player.hull == null:
+		var fuel := player.fuel
+		Equipment.give_starting_kit(player, player.race_id)
+		player.fuel = minf(fuel, player.fuel_max)

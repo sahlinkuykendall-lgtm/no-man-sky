@@ -1,5 +1,5 @@
 extends SceneTree
-## Plays the real game headlessly for a while (menu -> new game -> trade -> fly -> jump ->
+## Plays the real game headlessly for a while (menu -> new game -> trade -> shipyard -> fly -> jump ->
 ## save/load -> back to menu) and fails if any script error or warning was logged.
 ##
 ## Usage: godot --headless -s res://tests/smoke_test.gd
@@ -60,8 +60,24 @@ func _run() -> void:
 	planet_screen.call("_submit", "buy", "food", 9999)
 	await _frames(2)
 	_check(ship.cargo_amount("food") > 0 and ship.credits < credits_before, "buying food failed")
-	planet_screen.call("_submit", "sell", "food", 1)
+	planet_screen.call("_submit", "sell", "food", 5) # Leaves room for a heavier fuel tank.
 	planet_screen.call("_on_refuel") # Tank is full: should only post a message.
+	await _frames(2)
+
+	# Visit the shipyard: buy a better fuel tank and repair some wear.
+	planet_screen.call("show_tab", "shipyard")
+	await _frames(2)
+	_check(planet_screen.call("current_tab") == "shipyard", "shipyard tab did not open")
+	ship.credits += 20000
+	ship.engine.condition = 60.0
+	var shipyard: Node = planet_screen.get("_shipyard")
+	shipyard.call("_on_buy", "long_range_tank")
+	await _frames(2)
+	_check(ship.fuel_tank.type_id == "long_range_tank", "buying a fuel tank failed")
+	shipyard.call("_on_repair")
+	await _frames(2)
+	_check(ship.engine.condition >= 99.9, "repair failed")
+	planet_screen.call("show_tab", "market")
 	await _frames(2)
 	hud.call("_toggle_planet_screen")
 	_check(not planet_screen.call("is_open"), "planet screen did not close")

@@ -249,6 +249,19 @@ func _report_event(event: Dictionary) -> void:
 			if event["free_amount"] > 0.0:
 				text += " The Ranger Corps added %.1f emergency fuel for free." % event["free_amount"]
 			_add_message(text, "good")
+		Shipyard.EVENT_BOUGHT_ITEM:
+			var item := ItemData.make(event["type_id"], event["race_id"])
+			var text := "Bought a %s for %s" % [item.display_name(), UiStyle.credits(event["price"])]
+			if event["trade_in"] > 0:
+				text += " (your old one traded in for %s)" % UiStyle.credits(event["trade_in"])
+			_add_message(text + ".", "good")
+		Shipyard.EVENT_REPAIRED:
+			var text := "Ship repaired for %s." % UiStyle.credits(event["credits"])
+			if event["free"]:
+				text += " The Ranger Corps patched up your worn gear for free."
+			_add_message(text, "good")
+		Shipyard.EVENT_EQUIPMENT_WORN:
+			_add_message("Your %s is worn out and losing power. Repair it at a shipyard." % str(Equipment.KIND_NAMES[event["kind"]]).to_lower(), "warning")
 
 
 ## Galactic news about a market event, if it happened close enough to matter.
@@ -341,8 +354,21 @@ func _info_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		"star":
 			var star_type := GameData.star_type(system.star_type_id)
 			return "[font_size=18][b]%s[/b][/font_size]\n%s\nPlanets: %d" % [system.name, star_type.get("name", ""), system.planets.size()]
-	return "[font_size=18][b]Your ship[/b][/font_size]\nSpeed: %.0f per day\nFuel: %.1f / %.0f\nJump range: %.0f pc\nCredits: %s\n%s\n\n[color=#9aa8c8]Click a planet to fly to it.\nLand (L) on inhabited planets to trade.\nOpen the Galaxy Map (M) to jump to another system.[/color]" % [
-		ship.speed, ship.fuel, ship.fuel_max, ship.jump_range, UiStyle.credits(ship.credits), _cargo_text(ship)]
+	return "[font_size=18][b]Your ship[/b][/font_size]\n%s\nSpeed: %.0f per day\nFuel: %.1f / %.0f\nJump range: %.0f pc (%.0f pc/day)\nCredits: %s\n%s\n\n[color=#9aa8c8]Click a planet to fly to it.\nLand (L) on inhabited planets to trade, buy equipment and repair.\nOpen the Galaxy Map (M) to jump to another system.[/color]" % [
+		_equipment_text(ship), ship.speed, ship.fuel, ship.fuel_max, ship.jump_range, ship.jump_speed, UiStyle.credits(ship.credits), _cargo_text(ship)]
+
+
+## Hull and equipment with their condition (orange when worn out).
+func _equipment_text(ship: ShipData) -> String:
+	if ship.hull == null:
+		return ""
+	var lines: Array[String] = ["%s  (hull %d / %d)" % [ship.hull.display_name(), roundi(ship.hull_hp), roundi(ship.hull_hp_max)]]
+	for kind: String in ["engine", "fuel_tank"]:
+		var item := ship.slot(kind)
+		if item != null:
+			var color := "#e0e8ff" if item.condition >= Equipment.WORN_CONDITION else "#ffbf59"
+			lines.append("%s  [color=%s]%d%%[/color]" % [item.stats().get("name", "?"), color, floori(item.condition)])
+	return "\n".join(lines)
 
 
 func _cargo_text(ship: ShipData) -> String:

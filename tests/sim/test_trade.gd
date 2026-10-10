@@ -15,7 +15,8 @@ func test_player_starts_with_money_and_an_empty_hold() -> void:
 	var galaxy := _galaxy()
 	var ship := galaxy.player_ship()
 	assert_eq(ship.credits, GalaxyGenerator.PLAYER_START_CREDITS)
-	assert_eq(ship.cargo_capacity, GalaxyGenerator.PLAYER_CARGO_CAPACITY)
+	assert_eq(ship.cargo_capacity, Equipment.cargo_space(ship.hull, ship.engine, ship.fuel_tank))
+	assert_true(ship.cargo_capacity >= 50, "starting hold too small")
 	assert_eq(ship.cargo_used(), 0)
 	assert_true(_market(galaxy) != null, "player should start at a planet with a market")
 
@@ -193,5 +194,5 @@ func test_old_saves_get_markets_and_money() -> void:
 		ship.erase("cargo_capacity")
 	var loaded := GalaxyData.from_dict(data)
 	assert_eq(loaded.player_ship().credits, GalaxyGenerator.PLAYER_START_CREDITS)
-	assert_eq(loaded.player_ship().cargo_capacity, GalaxyGenerator.PLAYER_CARGO_CAPACITY)
+	assert_eq(loaded.player_ship().cargo_capacity, galaxy.player_ship().cargo_capacity)
 	assert_false(_market(loaded).market_stock.is_empty(), "markets should be created")

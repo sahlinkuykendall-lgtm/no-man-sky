@@ -38,6 +38,12 @@ func _run() -> void:
 	planet_screen.call("_submit", "buy", "minerals", 12)
 	await _frames(5)
 	await _shot("03_planet_market")
+	ship.engine.condition = 42.0 # Show some wear so the Repair button has work to do.
+	ship.hull_hp -= 15.0
+	planet_screen.call("show_tab", "shipyard")
+	await _frames(5)
+	await _shot("03b_shipyard")
+	planet_screen.call("show_tab", "market")
 	hud.call("_toggle_planet_screen")
 
 	var system := galaxy.get_system(ship.system_id)
@@ -51,6 +57,9 @@ func _run() -> void:
 		turn_manager.end_turn()
 		await create_timer(1.1).timeout
 	await _shot("05_after_three_turns")
+	root.get_node("EventBus").selection_changed.emit("", -1)
+	await _frames(5)
+	await _shot("05b_your_ship")
 
 	hud.call("_toggle_map")
 	await _frames(5)

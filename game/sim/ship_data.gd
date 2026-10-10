@@ -15,11 +15,20 @@ var system_id: int = 0
 var position: Vector2 = Vector2.ZERO
 var heading: float = 0.0 ## Radians, direction the ship faces.
 
-# Ship stats (equipment comes in Milestone 3; these are the placeholders).
+# Hull and equipment. NPC ships don't have any yet (Milestone 5) and use the stats below
+# directly. For ships that do, Equipment.apply_stats() works the stats out from them.
+var hull: ItemData = null
+var engine: ItemData = null
+var fuel_tank: ItemData = null
+var hull_hp: float = 0.0 ## Hull damage arrives with combat (Milestone 4).
+
+# Ship stats.
 var speed: float = 150.0 ## System units per day.
 var fuel: float = 30.0
 var fuel_max: float = 30.0
 var jump_range: float = 20.0 ## Parsecs.
+var jump_speed: float = 8.0 ## Parsecs per day in hyperspace.
+var hull_hp_max: float = 0.0
 var cargo_capacity: int = 0 ## Units (tons) of goods the hold can carry.
 
 # Money and cargo. For now the pilot's money lives on their ship.
@@ -43,6 +52,28 @@ var jump_days_left: int = 0
 
 # Simple NPC memory.
 var idle_days: int = 0
+
+
+## The item in a slot: "hull", "engine" or "fuel_tank" (null if empty).
+func slot(kind: String) -> ItemData:
+	match kind:
+		"hull":
+			return hull
+		"engine":
+			return engine
+		"fuel_tank":
+			return fuel_tank
+	return null
+
+
+func set_slot(kind: String, item: ItemData) -> void:
+	match kind:
+		"hull":
+			hull = item
+		"engine":
+			engine = item
+		"fuel_tank":
+			fuel_tank = item
 
 
 ## Total units of cargo on board.
@@ -91,6 +122,12 @@ func to_dict() -> Dictionary:
 		"fuel": fuel,
 		"fuel_max": fuel_max,
 		"jump_range": jump_range,
+		"jump_speed": jump_speed,
+		"hull_hp": hull_hp,
+		"hull_hp_max": hull_hp_max,
+		"hull": _item_to_dict(hull),
+		"engine": _item_to_dict(engine),
+		"fuel_tank": _item_to_dict(fuel_tank),
 		"cargo_capacity": cargo_capacity,
 		"credits": credits,
 		"cargo": cargo.duplicate(),
@@ -121,6 +158,13 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.fuel = float(d.get("fuel", 30.0))
 	s.fuel_max = float(d.get("fuel_max", 30.0))
 	s.jump_range = float(d.get("jump_range", 20.0))
+	s.jump_speed = float(d.get("jump_speed", 8.0))
+	s.hull_hp = float(d.get("hull_hp", 0.0))
+	s.hull_hp_max = float(d.get("hull_hp_max", 0.0))
+	for kind: String in ["hull", "engine", "fuel_tank"]:
+		var item_dict: Variant = d.get(kind)
+		if item_dict is Dictionary:
+			s.set_slot(kind, ItemData.from_dict(item_dict))
 	s.cargo_capacity = int(d.get("cargo_capacity", 0))
 	s.credits = int(d.get("credits", 0))
 	var hold: Dictionary = d.get("cargo", {})
@@ -137,6 +181,13 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.jump_days_left = int(d.get("jump_days_left", 0))
 	s.idle_days = int(d.get("idle_days", 0))
 	return s
+
+
+## An item as a dictionary, or null for an empty slot.
+static func _item_to_dict(item: ItemData) -> Variant:
+	if item == null:
+		return null
+	return item.to_dict()
 
 
 static func _vec(a: Array) -> Vector2:

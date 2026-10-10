@@ -17,7 +17,6 @@ const REFERENCE_ORBIT := 200.0
 
 const PLAYER_SHIP_NAME := "Ranger"
 const PLAYER_START_CREDITS := 2500
-const PLAYER_CARGO_CAPACITY := 60
 
 
 static func generate(galaxy_seed: int, system_count: int = DEFAULT_SYSTEM_COUNT, player_race_id: String = "human") -> GalaxyData:
@@ -165,12 +164,9 @@ static func _spawn_player(galaxy: GalaxyData, player_race_id: String) -> void:
 	ship.is_player = true
 	ship.race_id = player_race_id
 	ship.system_id = home.id
-	ship.speed = 170.0
-	ship.fuel = 30.0
-	ship.fuel_max = 30.0
-	ship.jump_range = 20.0
+	# A Courier with a Spark Drive and a Standard Tank, built by the player's own race.
+	Equipment.give_starting_kit(ship, player_race_id)
 	ship.credits = PLAYER_START_CREDITS
-	ship.cargo_capacity = PLAYER_CARGO_CAPACITY
 	var inhabited := home.inhabited_planets()
 	var start_planet := inhabited[0] if not inhabited.is_empty() else home.planets[0]
 	ship.orbiting_planet_id = start_planet.id

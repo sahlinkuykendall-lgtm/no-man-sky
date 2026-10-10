@@ -108,8 +108,8 @@ func _draw() -> void:
 		var from := galaxy_to_screen(galaxy.get_system(ship.jump_origin_system_id).galaxy_pos)
 		var to := galaxy_to_screen(galaxy.get_system(ship.jump_target_system_id).galaxy_pos)
 		draw_line(from, to, Color(0.75, 0.5, 1.0), 2.0)
-		var total := TurnResolver.jump_days(galaxy.distance_between(ship.jump_origin_system_id, ship.jump_target_system_id))
-		var progress := 1.0 - float(ship.jump_days_left) / total
+		var total := TurnResolver.jump_days(galaxy.distance_between(ship.jump_origin_system_id, ship.jump_target_system_id), ship.jump_speed)
+		var progress := clampf(1.0 - float(ship.jump_days_left) / total, 0.0, 1.0)
 		draw_circle(from.lerp(to, progress), 5.0, UiStyle.ACCENT)
 
 	# Planned jump course.
@@ -181,7 +181,7 @@ func _refresh_info() -> void:
 	else:
 		var distance := galaxy.distance_between(ship.system_id, _selected)
 		lines.append("\nDistance: %.1f pc" % distance)
-		lines.append("Hyperspace: %d days" % TurnResolver.jump_days(distance))
+		lines.append("Hyperspace: %d days" % TurnResolver.jump_days(distance, ship.jump_speed))
 		lines.append("Fuel needed: %.1f (you have %.1f)" % [distance * TurnResolver.FUEL_PER_PARSEC, ship.fuel])
 		if distance > ship.jump_range:
 			lines.append("[color=#ffbf59]Out of jump range (%.1f pc).[/color]" % ship.jump_range)

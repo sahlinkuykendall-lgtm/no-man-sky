@@ -113,6 +113,12 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 40 | Lumari ban alcohol (M2) | Gives §10's "Alcohol: illegal on some worlds" a home: it's illegal on every Lumari world |
 | 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold. Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free until M5 gives them real trading |
 | 42 | Trading takes no time (M2) | Landing (L) on an inhabited planet you orbit opens its market. Trading is instant and costs no turn, like SR2. Credits live on the player's ship until pilots/characters are their own data (M15) |
+| 43 | Ship = hull + equipment (M3) | A ship is built from a **hull** plus one item per equipment slot. M3 has the hull, **engine** and **fuel tank**. Weapons (M4), radar, scanner, gripper, repair droid and shield (M4–M5) plug into the same system later. The ship's stats come from its items: speed, jump range and hyperspace speed from the engine, fuel capacity from the tank, armor (max hull HP) from the hull. Models and numbers live in `game/data/equipment.json` |
+| 44 | Weight vs cargo (M3) | Like SR2, a hull's **size** is shared between equipment and cargo: cargo space = hull size − weight of everything installed. Better engines are heavier, so you trade hold space for speed. A purchase is refused if the new cargo space would be smaller than what you carry |
+| 45 | Race of manufacture (M3) | Every shipyard sells only its own race's models, up to the planet's tech level. Each race changes price, weight, wear and armor (`races.json` → `manufacturing`): Veyari gear is pricey, light and long-lasting; Lumari gear is light; Skarn gear is cheap but wears fast; Gorruk hulls are tough but heavy; Human gear is the baseline. The player starts with a Courier hull, Spark Drive and Standard Tank built by their own race (a human pilot has speed 170, jump 20 pc, fuel 30 and a 60 t hold) |
+| 46 | Wear (M3) | Engines wear a little every day of flying and more on each hyperspace jump. Fuel tanks wear on jumps. Above 50% condition an item works at full power; below 50% it loses power, down to **half power at 0%**. It never breaks completely in M3. The hull's condition is its HP (damage arrives with combat in M4). The player gets a warning when an item drops below 50% |
+| 47 | Shipyard prices (M3) | Buying a new item **trades in** the old one for up to 60% of its price (40% of that is kept even when worn out). Repairing an item from 0% to 100% costs 35% of its price; hull repairs cost 8 cr per HP (times the maker's price factor). A pilot who can't afford a full repair pays for what they can, and the Ranger Corps patches the engine and tank up to 50% for free, so nobody is stranded |
+| 48 | Hyperspace speed (M3) | Replaces the fixed "1 day per 8 pc" from Decision #37: transit speed now comes from the engine (8–14 pc/day) |
 
 ---
 
@@ -283,6 +289,12 @@ Each item has: **tech level (1–8)**, **manufacturer race** (affects price, qua
 
 ### Wear & repair
 - Items wear with use and with damage. Repair them at planets and stations; the cost depends on the item's race and your **Technical** skill.
+
+### How the prototype works (Milestone 3)
+- **Items built so far:** 6 hulls (Courier, Freighter, Fighter, Heavy Fighter, Bulk Hauler, Gunship; tech 1–7), 6 engines (Spark to Zenith Drive; tech 1–8) and 5 fuel tanks (Standard to Voidrunner; tech 1–8). Each comes in five versions, one per race (Decision #45). Weapon slots are listed on hulls but do nothing until M4.
+- **Shipyard:** every inhabited planet has one. **Land (L)** and open the **Shipyard** tab. It shows your ship (cargo space, hull HP, each item with its condition) with a *Repair all* button, and everything for sale with its stats, weight, price and what you would pay after the trade-in.
+- **Rules:** Decisions #43–#48. NPC ships don't have equipment yet; they keep fixed stats until M5 gives them real lives.
+- **Not yet:** the Technical skill (repair discounts), tuning modules, artifacts, buying extra ships and fleets. These come with their own milestones.
 
 ### Fleets & wingmen
 - **Leadership skill** sets how many ships can follow you (1–5, plus perks for larger fleets).
@@ -905,7 +917,7 @@ The order is chosen so each milestone produces something **playable** and later 
 | **M0 Setup** ✅ | Godot project, folders, autoloads, test framework, CI | Empty project that runs |
 | **M1 Galaxy & Turns** ✅ | Generate a galaxy and systems, isometric camera, fly the ship, End Turn, orbiting planets | Fly around a galaxy |
 | **M2 Trade** ✅ | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
-| **M3 Ships & Gear** | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
+| **M3 Ships & Gear** ✅ | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
 | **M4 Space Combat** | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |
 | **M5 Living Galaxy** | NPC traders, pirates, police, rangers with AI; news ticker; hailing and negotiation | Galaxy runs without you |
 | **M6 Ascendancy War** | Invasion and liberation simulation, under-attack alerts, cores and Ranger Hub | The war plays out |

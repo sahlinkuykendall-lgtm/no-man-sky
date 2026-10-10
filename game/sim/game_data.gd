@@ -49,6 +49,18 @@ static func market_events() -> Array:
 	return load_json("goods.json").get("events", [])
 
 
+static func hulls() -> Array:
+	return load_json("equipment.json").get("hulls", [])
+
+
+static func engines() -> Array:
+	return load_json("equipment.json").get("engines", [])
+
+
+static func fuel_tanks() -> Array:
+	return load_json("equipment.json").get("fuel_tanks", [])
+
+
 static func name_syllables() -> Dictionary:
 	return load_json("names.json")
 
@@ -87,6 +99,26 @@ static func good(id: String) -> Dictionary:
 
 static func market_event(id: String) -> Dictionary:
 	return find_by_id(market_events(), id)
+
+
+## A hull or piece of equipment from equipment.json, whatever its kind.
+static func item_type(id: String) -> Dictionary:
+	for entries: Array in [hulls(), engines(), fuel_tanks()]:
+		var entry := find_by_id(entries, id)
+		if not entry.is_empty():
+			return entry
+	return {}
+
+
+## "hull", "engine", "fuel_tank", or "" if the id is unknown.
+static func item_kind(id: String) -> String:
+	if not find_by_id(hulls(), id).is_empty():
+		return "hull"
+	if not find_by_id(engines(), id).is_empty():
+		return "engine"
+	if not find_by_id(fuel_tanks(), id).is_empty():
+		return "fuel_tank"
+	return ""
 
 
 ## Picks a random entry, using each entry's "weight" field (default 1).

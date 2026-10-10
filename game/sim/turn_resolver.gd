@@ -9,7 +9,7 @@ extends RefCounted
 ## Pure logic with no scene/node code, so the same rules run in solo, on a host, or on a
 ## dedicated server.
 
-const JUMP_SPEED := 8.0 ## Parsecs travelled per day in hyperspace.
+const JUMP_SPEED := 8.0 ## Parsecs per day in hyperspace for ships without an engine (NPCs).
 const FUEL_PER_PARSEC := 1.0
 const PLANET_ARRIVAL_MARGIN := 18.0 ## Ships park this far from a planet's surface.
 
@@ -31,6 +31,8 @@ const EVENT_JUMP_FAILED := "jump_failed"
 ##         {"type": "buy", "good_id": String, "quantity": int}  (while orbiting an inhabited planet)
 ##         {"type": "sell", "good_id": String, "quantity": int}
 ##         {"type": "refuel"}
+##         {"type": "buy_equipment", "type_id": String}  (at a planet's shipyard)
+##         {"type": "repair"}
 static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, events: Array[Dictionary] = []) -> String:
 	if ship.in_hyperspace:
 		return "Can't change course while in hyperspace."
@@ -42,6 +44,10 @@ static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, e
 			return Trade.sell(galaxy, ship, str(order.get("good_id", "")), int(order.get("quantity", 0)), events)
 		"refuel":
 			return Trade.refuel(galaxy, ship, events)
+		"buy_equipment":
+			return Shipyard.buy_item(galaxy, ship, str(order.get("type_id", "")), events)
+		"repair":
+			return Shipyard.repair(galaxy, ship, events)
 		"move_to_point":
 			var point: Vector2 = order.get("point", ship.position)
 			ship.clear_course()
@@ -121,9 +127,9 @@ static func days_to_destination(galaxy: GalaxyData, ship: ShipData) -> int:
 	return maxi(1, ceili((ship.position.distance_to(target) - stop_short) / ship.speed))
 
 
-## Days a jump between two systems takes in hyperspace.
-static func jump_days(distance: float) -> int:
-	return maxi(1, ceili(distance / JUMP_SPEED))
+## Days a jump between two systems takes in hyperspace (jump_speed comes from the engine).
+static func jump_days(distance: float, jump_speed: float = JUMP_SPEED) -> int:
+	return maxi(1, ceili(distance / maxf(jump_speed, 0.1)))
 
 
 static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dictionary]) -> void:
@@ -157,6 +163,7 @@ static func _resolve_ship(galaxy: GalaxyData, ship: ShipData, events: Array[Dict
 	var direction := to_target / distance if distance > 0.001 else Vector2.from_angle(ship.heading)
 	ship.heading = direction.angle()
 
+	_wear(ship, "wear_per_flight_day", events) # A day of flying.
 	if distance - stop_short > ship.speed:
 		ship.position += direction * ship.speed
 		return
@@ -190,7 +197,8 @@ static func _enter_hyperspace(galaxy: GalaxyData, ship: ShipData, events: Array[
 	ship.fuel -= fuel_needed
 	ship.in_hyperspace = true
 	ship.jump_origin_system_id = ship.system_id
-	ship.jump_days_left = jump_days(distance)
+	_wear(ship, "wear_per_jump", events) # Before working out the days, in case the engine just wore out.
+	ship.jump_days_left = jump_days(distance, ship.jump_speed)
 	ship.has_destination = false
 	events.append({"type": EVENT_ENTERED_HYPERSPACE, "ship_id": ship.id, "system_id": target_id, "days": ship.jump_days_left})
 
@@ -209,6 +217,12 @@ static func _exit_hyperspace(galaxy: GalaxyData, ship: ShipData, events: Array[D
 	ship.jump_origin_system_id = -1
 	ship.clear_course()
 	events.append({"type": EVENT_ARRIVED_SYSTEM, "ship_id": ship.id, "system_id": arrival.id})
+
+
+## Wears the ship's equipment and reports items that just became worn out.
+static func _wear(ship: ShipData, use: String, events: Array[Dictionary]) -> void:
+	for kind in Equipment.wear(ship, use):
+		events.append({"type": Shipyard.EVENT_EQUIPMENT_WORN, "ship_id": ship.id, "kind": kind})
 
 
 ## NPC ships refuel for free at inhabited planets (they have no money yet; Milestone 5

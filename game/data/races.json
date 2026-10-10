@@ -1,0 +1,10 @@
+{
+	"_comment": "The five playable races. Names are placeholders (see docs/MASTER_DESIGN.md section 11).",
+	"races": [
+		{ "id": "human", "name": "Humans", "adjective": "Human", "color": "#5b9dff", "description": "Adaptable traders and diplomats." },
+		{ "id": "veyari", "name": "Veyari", "adjective": "Veyari", "color": "#4fe0b5", "description": "Ancient, serene and technologically supreme." },
+		{ "id": "lumari", "name": "Lumari", "adjective": "Lumari", "color": "#f1e36a", "description": "Brilliant, frail scientists allied with the Veyari." },
+		{ "id": "skarn", "name": "Skarn", "adjective": "Skarn", "color": "#e3923f", "description": "Cunning smugglers who work for whoever pays." },
+		{ "id": "gorruk", "name": "Gorruk", "adjective": "Gorruk", "color": "#e2524b", "description": "Massive warriors who live for honor and glory." }
+	]
+}

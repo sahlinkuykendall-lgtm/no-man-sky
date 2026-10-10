@@ -1,0 +1,10 @@
+{
+	"_comment": "Star types. radius is in system units; weight is how common the type is.",
+	"star_types": [
+		{ "id": "yellow", "name": "Yellow star", "color": "#ffd76a", "radius": 60, "weight": 30 },
+		{ "id": "orange", "name": "Orange star", "color": "#ff9a4a", "radius": 55, "weight": 25 },
+		{ "id": "red_dwarf", "name": "Red dwarf", "color": "#ff5a3c", "radius": 42, "weight": 25 },
+		{ "id": "white", "name": "White star", "color": "#f4f6ff", "radius": 66, "weight": 12 },
+		{ "id": "blue_giant", "name": "Blue giant", "color": "#82b4ff", "radius": 86, "weight": 8 }
+	]
+}

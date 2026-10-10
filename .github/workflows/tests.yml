@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GODOT_VERSION: "4.7.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot ${{ env.GODOT_VERSION }}
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+          ./godot --version
+
+      - name: Treat common GDScript warnings as errors
+        run: cat tests/strict_warnings.cfg >> project.godot
+
+      - name: Import project
+        run: ./godot --headless --import
+
+      - name: Unit tests
+        run: ./godot --headless -s res://tests/run_tests.gd
+
+      - name: Smoke test (plays the game headlessly)
+        run: ./godot --headless -s res://tests/smoke_test.gd

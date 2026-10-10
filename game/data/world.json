@@ -1,0 +1,15 @@
+{
+	"_comment": "Economy and government types for inhabited planets (docs/MASTER_DESIGN.md sections 10-11).",
+	"economies": [
+		{ "id": "agricultural", "name": "Agricultural", "weight": 35 },
+		{ "id": "industrial", "name": "Industrial", "weight": 35 },
+		{ "id": "mixed", "name": "Mixed", "weight": 30 }
+	],
+	"governments": [
+		{ "id": "anarchy", "name": "Anarchy", "weight": 10 },
+		{ "id": "dictatorship", "name": "Dictatorship", "weight": 20 },
+		{ "id": "monarchy", "name": "Monarchy", "weight": 20 },
+		{ "id": "republic", "name": "Republic", "weight": 25 },
+		{ "id": "democracy", "name": "Democracy", "weight": 25 }
+	]
+}

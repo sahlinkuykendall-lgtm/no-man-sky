@@ -1,0 +1,6 @@
+{
+	"_comment": "Syllables used to build star system and planet names.",
+	"starts": ["al", "ar", "bel", "cor", "dra", "el", "fen", "gal", "hel", "ix", "jor", "kes", "lor", "mar", "nex", "or", "pra", "qua", "ras", "sol", "tar", "ul", "ven", "wy", "xan", "yor", "zan", "ae", "bri", "cae", "dor", "ost", "ves", "kal", "myr", "tho", "sel", "vor"],
+	"middles": ["a", "e", "i", "o", "u", "ae", "ia", "on", "ar", "el", "ir", "or", "an", "ys"],
+	"ends": ["ra", "nis", "th", "ion", "ax", "us", "ar", "eon", "is", "or", "ia", "ux", "en", "os", "a", "ix", "ul", "ane", "ess", "ok"]
+}

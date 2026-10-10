@@ -1,7 +1,7 @@
 # PROJECT RANGER — Master Design Document
 
 > **Working title:** Project Ranger (placeholder — rename any time)
-> **Engine:** Godot 4.x · **Language:** GDScript · **Platform:** PC (Windows/Linux) first
+> **Engine:** Godot 4.7 · **Language:** GDScript · **Platform:** PC (Windows/Linux) first
 > **Genre:** Turn-based space RPG/trader (top-down isometric) + first-person open-world planet exploration
 > **Inspiration mix:** ~85% *Space Rangers 2* (core loop, turns, trade, missions, races, roles, war) · ~15% *No Man's Sky* (landing, open-world planets, survival, crafting, walkable ship)
 > **Status:** Pre-production. This document is the single source of truth. Update it whenever a decision changes.
@@ -105,6 +105,9 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 32 | Skills | The 6 SR2-style skills plus on-foot skills |
 | 33 | Death | Respawn with a penalty (the host can enable Hardcore) |
 | 34 | Dislikes to avoid | None stated |
+| 35 | Engine version (2026-10-10) | Godot **4.7** (latest stable when development started) |
+| 36 | Testing (2026-10-10) | A small built-in test runner (`tests/run_tests.gd`) plus a headless smoke test that plays the game. This replaces the GUT plugin to avoid an external dependency |
+| 37 | Hyperspace departure (2026-10-10) | As in SR2, ships must fly out to the system's **hyperspace boundary** (dashed purple ring) before jumping. Fuel = 1 per parsec, and transit takes 1 day per 8 pc |
 
 ---
 
@@ -826,7 +829,7 @@ Permanent death: SR2 style. Death means a new character.
 > These choices are written for **AI assistants doing the coding**: keep things simple, data-driven, modular and well-commented.
 
 ### Engine
-- **Godot 4.x (latest stable 4.x)**, **GDScript** with static typing (`var x: int`).
+- **Godot 4.7**, **GDScript** with static typing (`var x: int`).
 - Built-in **ENet high-level multiplayer** (`MultiplayerAPI`, RPCs) for networking.
 - **FastNoiseLite** (built in) for terrain and procedural generation.
 
@@ -852,8 +855,9 @@ Permanent death: SR2 style. Death means a new character.
   /battle/              ← planetary battle (FPS + RTS)
   /ui/                  ← shared UI widgets/screens
   /assets/              ← models, textures, audio (with CREDITS.md)
-/tests/                 ← GUT unit tests for /sim
-/server/                ← headless server entry/config
+/tests/                 ← unit tests (run_tests.gd + test_*.gd) and smoke_test.gd
+/tools/                 ← dev helpers (e.g. capture_screenshots.gd)
+/server/                ← headless server entry/config (later)
 ```
 
 ### Data-driven content
@@ -872,7 +876,9 @@ Content is defined in **data files**, so AIs can add it without code changes: go
 - JSON (or Godot binary resources) for galaxy state + players + planet deltas. Versioned with a migration hook.
 
 ### Testing
-- **GUT** (Godot Unit Test) for the `/sim` logic. The economy, combat math and turn resolution must be tested.
+- A built-in runner, `tests/run_tests.gd`, runs every `tests/**/test_*.gd` (each one extends `TestCase`). The economy, combat math and turn resolution must be tested.
+- `tests/smoke_test.gd` plays the real game headlessly and fails on any logged error.
+- GitHub Actions runs both on every push.
 
 ---
 
@@ -882,8 +888,8 @@ The order is chosen so each milestone produces something **playable** and later 
 
 | Milestone | Goal | Playable result |
 |---|---|---|
-| **M0 Setup** | Godot project, folders, autoloads, test framework, CI | Empty project that runs |
-| **M1 Galaxy & Turns** | Generate a galaxy and systems, isometric camera, fly the ship, End Turn, orbiting planets | Fly around a galaxy |
+| **M0 Setup** ✅ | Godot project, folders, autoloads, test framework, CI | Empty project that runs |
+| **M1 Galaxy & Turns** ✅ | Generate a galaxy and systems, isometric camera, fly the ship, End Turn, orbiting planets | Fly around a galaxy |
 | **M2 Trade** | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
 | **M3 Ships & Gear** | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
 | **M4 Space Combat** | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |

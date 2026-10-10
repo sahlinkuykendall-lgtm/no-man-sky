@@ -1,0 +1,12 @@
+{
+	"_comment": "Planet types. habitable planets can host a race's city. weight is how common the type is.",
+	"planet_types": [
+		{ "id": "temperate", "name": "Temperate", "color": "#4caf6a", "habitable": true, "weight": 28 },
+		{ "id": "ocean", "name": "Ocean", "color": "#3a7bd5", "habitable": true, "weight": 12 },
+		{ "id": "desert", "name": "Desert", "color": "#d8b26a", "habitable": true, "weight": 15 },
+		{ "id": "frozen", "name": "Frozen", "color": "#cfe8f5", "habitable": false, "weight": 12 },
+		{ "id": "toxic", "name": "Toxic", "color": "#9acd32", "habitable": false, "weight": 10 },
+		{ "id": "volcanic", "name": "Volcanic", "color": "#c8452d", "habitable": false, "weight": 8 },
+		{ "id": "barren", "name": "Barren", "color": "#8a8580", "habitable": false, "weight": 15 }
+	]
+}

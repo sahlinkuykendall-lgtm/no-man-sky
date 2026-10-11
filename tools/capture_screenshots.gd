@@ -102,6 +102,24 @@ func _run() -> void:
 	await _frames(5)
 	await _shot("11_loot")
 
+	# The living galaxy: hail a ship that flies by, and look at the Ranger Corps board.
+	var police := NpcSpawner.spawn_police(galaxy, galaxy.get_system(ship.system_id), rng)
+	police.position = ship.position + Vector2(-200, 120)
+	space_view.call("_sync_ship_nodes")
+	space_view.call("_apply_animation", 1.0)
+	root.get_node("EventBus").selection_changed.emit("ship", police.id)
+	await _frames(5)
+	await _shot("12_police_info")
+	hud.call("_open_hail_window")
+	hud.get("_hail_window").call("_send", "news")
+	await _frames(5)
+	await _shot("13_hail")
+	hud.get("_hail_window").call("close")
+	hud.call("_toggle_ranger_board")
+	await _frames(5)
+	await _shot("14_ranger_board")
+	hud.call("_toggle_ranger_board")
+
 	var neighbour := -1
 	for other in galaxy.systems:
 		var d := galaxy.distance_between(ship.system_id, other.id)

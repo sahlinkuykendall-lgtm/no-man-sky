@@ -16,7 +16,8 @@ var next_loot_id: int = 0
 ## How many pirates and traders the system normally has. Destroyed ships are replaced
 ## over time until these numbers are reached again (see NpcSpawner).
 var pirate_limit: int = 0
-var trader_limit: int = 0
+var trader_limit: int = 0 ## Traders travel, so this only counts toward the galaxy's total.
+var police_limit: int = 0
 
 
 func get_planet(planet_id: int) -> PlanetData:
@@ -89,6 +90,7 @@ func to_dict() -> Dictionary:
 		"next_loot_id": next_loot_id,
 		"pirate_limit": pirate_limit,
 		"trader_limit": trader_limit,
+		"police_limit": police_limit,
 	}
 
 
@@ -111,4 +113,5 @@ static func from_dict(d: Dictionary) -> StarSystemData:
 	s.next_loot_id = int(d.get("next_loot_id", 0))
 	s.pirate_limit = int(d.get("pirate_limit", 0))
 	s.trader_limit = int(d.get("trader_limit", 0))
+	s.police_limit = int(d.get("police_limit", 0))
 	return s

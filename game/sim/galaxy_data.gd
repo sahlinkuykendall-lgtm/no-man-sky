@@ -6,7 +6,8 @@ extends RefCounted
 ## Version 2 added markets, credits and cargo (Milestone 2).
 ## Version 3 added hulls and equipment (Milestone 3).
 ## Version 4 added weapons, pirates, asteroids and loot (Milestone 4).
-const SAVE_VERSION := 4
+## Version 5 added shields, radar, karma, police, rangers and news (Milestone 5).
+const SAVE_VERSION := 5
 
 var galaxy_seed: int = 0
 var day: int = 1
@@ -14,6 +15,8 @@ var systems: Array[StarSystemData] = []
 var ships: Array[ShipData] = []
 var player_ship_id: int = -1
 var next_ship_id: int = 0
+var ranger_limit: int = 0 ## How many NPC rangers the galaxy normally has (see NpcSpawner).
+var news: Array[Dictionary] = [] ## Headlines, newest first: {"day", "text"}. See News.
 
 var _ship_index: Dictionary = {} ## ship id -> ShipData, for fast lookup.
 
@@ -58,6 +61,21 @@ func ships_in_system(system_id: int) -> Array[ShipData]:
 	return result
 
 
+## The player and the NPC rangers, best first (by ranking points, then pirates destroyed).
+func ranger_ranking() -> Array[ShipData]:
+	var rangers: Array[ShipData] = []
+	for ship in ships:
+		if ship.is_player or ship.role == ShipData.ROLE_RANGER:
+			rangers.append(ship)
+	rangers.sort_custom(func(a: ShipData, b: ShipData) -> bool:
+		if a.points != b.points:
+			return a.points > b.points
+		if a.kills != b.kills:
+			return a.kills > b.kills
+		return a.id < b.id)
+	return rangers
+
+
 ## Distance between two systems on the galaxy map, in parsecs.
 func distance_between(system_a: int, system_b: int) -> float:
 	return get_system(system_a).galaxy_pos.distance_to(get_system(system_b).galaxy_pos)
@@ -85,6 +103,8 @@ func to_dict() -> Dictionary:
 		"next_ship_id": next_ship_id,
 		"systems": system_dicts,
 		"ships": ship_dicts,
+		"ranger_limit": ranger_limit,
+		"news": news.duplicate(true),
 	}
 
 
@@ -98,6 +118,9 @@ static func from_dict(d: Dictionary) -> GalaxyData:
 	for ship_dict: Dictionary in d.get("ships", []):
 		g.add_ship(ShipData.from_dict(ship_dict))
 	g.next_ship_id = maxi(g.next_ship_id, int(d.get("next_ship_id", 0)))
+	g.ranger_limit = int(d.get("ranger_limit", 0))
+	for item: Dictionary in d.get("news", []):
+		g.news.append({"day": int(item.get("day", 0)), "text": str(item.get("text", ""))})
 	var version := int(d.get("save_version", 1))
 	if version < 2:
 		_upgrade_from_version_1(g)
@@ -105,6 +128,8 @@ static func from_dict(d: Dictionary) -> GalaxyData:
 		_upgrade_from_version_2(g)
 	if version < 4:
 		_upgrade_from_version_3(g)
+	if version < 5:
+		_upgrade_from_version_4(g)
 	# Recompute stats from equipment, so balance changes in equipment.json reach old saves.
 	for ship in g.ships:
 		Equipment.apply_stats(ship)
@@ -139,9 +164,28 @@ static func _upgrade_from_version_3(g: GalaxyData) -> void:
 			player.gripper = ItemData.make(Equipment.STARTING_GRIPPER, player.race_id)
 		if player.weapons.is_empty():
 			player.weapons.append(ItemData.make(Equipment.STARTING_WEAPON, player.race_id))
-	for ship in g.ships.duplicate():
-		if not ship.is_player:
-			g.remove_ship(ship.id)
+	_remove_npcs(g)
 	for system in g.systems:
 		GalaxyGenerator.make_asteroid_belt(g.galaxy_seed, system)
 	NpcSpawner.populate(g)
+
+
+## Saves from Milestones 1-4 had no radar, police or rangers: the player gets a radar (if
+## there is room for it) and all NPCs are replaced by the new kinds.
+static func _upgrade_from_version_4(g: GalaxyData) -> void:
+	var player := g.player_ship()
+	if player != null and player.hull != null and player.radar == null:
+		var radar := ItemData.make(Equipment.STARTING_RADAR, player.race_id)
+		Equipment.apply_stats(player)
+		if player.cargo_free() >= Equipment.weight(radar):
+			player.radar = radar
+	if player != null:
+		player.clear_target()
+	_remove_npcs(g)
+	NpcSpawner.populate(g)
+
+
+static func _remove_npcs(g: GalaxyData) -> void:
+	for ship in g.ships.duplicate():
+		if not ship.is_player:
+			g.remove_ship(ship.id)

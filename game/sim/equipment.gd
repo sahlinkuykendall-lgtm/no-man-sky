@@ -8,11 +8,15 @@ extends RefCounted
 ##   speed, jump range and hyperspace speed come from the engine
 ##   fuel capacity comes from the fuel tank
 ##   armor (max hull HP) comes from the hull
+##   the shield takes a share off every hit, the radar sets how far the ship can see
 ## Worn equipment (below 50% condition) loses power: at 0% it works at half strength.
 
 ## Every kind of item, in the order shops list them.
-const KINDS: Array[String] = ["hull", "engine", "fuel_tank", "gripper", "weapon"]
-const KIND_NAMES := {"hull": "Hull", "engine": "Engine", "fuel_tank": "Fuel tank", "gripper": "Gripper", "weapon": "Weapon"}
+const KINDS: Array[String] = ["hull", "engine", "fuel_tank", "gripper", "radar", "shield", "weapon"]
+## The kinds that take one slot each (weapons have several slots).
+const SINGLE_SLOT_KINDS: Array[String] = ["hull", "engine", "fuel_tank", "gripper", "radar", "shield"]
+const KIND_NAMES := {"hull": "Hull", "engine": "Engine", "fuel_tank": "Fuel tank", "gripper": "Gripper",
+	"radar": "Radar", "shield": "Shield", "weapon": "Weapon"}
 const WEAPON_TYPE_NAMES := {"energy": "Energy", "fragment": "Fragment", "missile": "Missile"}
 
 const WORN_CONDITION := 50.0 ## Below this, equipment starts losing power.
@@ -26,6 +30,8 @@ const STARTING_ENGINE := "spark_drive"
 const STARTING_FUEL_TANK := "standard_tank"
 const STARTING_GRIPPER := "basic_gripper"
 const STARTING_WEAPON := "pulse_laser"
+const STARTING_RADAR := "basic_radar"
+const NO_RADAR_RANGE := 350.0 ## How far a ship without a radar can see (by eye).
 
 
 # --- Item values ---------------------------------------------------------------
@@ -151,6 +157,41 @@ static func wear_weapon(weapon: ItemData) -> void:
 	weapon.condition = maxf(0.0, weapon.condition - amount)
 
 
+# --- Shields and radar --------------------------------------------------------------
+
+## Share of every hit the ship's shield stops (0 without a shield).
+static func shield_absorb(ship: ShipData) -> float:
+	if ship.shield == null:
+		return 0.0
+	return float(ship.shield.stats().get("absorb", 0.0)) * efficiency(ship.shield)
+
+
+## Wears the shield after it stopped a hit.
+static func wear_shield(ship: ShipData) -> void:
+	if ship.shield != null:
+		var amount := float(ship.shield.stats().get("wear_per_hit", 0.0)) * maker_factor(ship.shield, "wear")
+		ship.shield.condition = maxf(0.0, ship.shield.condition - amount)
+
+
+## How far the ship can see other ships.
+static func radar_range(ship: ShipData) -> float:
+	if ship.radar == null:
+		return NO_RADAR_RANGE
+	return maxf(NO_RADAR_RANGE, float(ship.radar.stats().get("range", 0)) * efficiency(ship.radar))
+
+
+## Whether `ship` can see `other` right now: in the same system and within radar range.
+## A ship you are fighting stays visible (you keep it locked on).
+static func on_radar(ship: ShipData, other: ShipData) -> bool:
+	if other == ship:
+		return true
+	if ship.in_hyperspace or other.in_hyperspace or other.system_id != ship.system_id:
+		return false
+	if ship.target_kind == Combat.TARGET_SHIP and ship.target_id == other.id:
+		return true
+	return ship.position.distance_to(other.position) <= radar_range(ship)
+
+
 static func gripper_range(ship: ShipData) -> float:
 	if ship.gripper == null:
 		return 0.0
@@ -194,6 +235,7 @@ static func give_starting_kit(ship: ShipData, race_id: String) -> void:
 	ship.engine = ItemData.make(STARTING_ENGINE, race_id)
 	ship.fuel_tank = ItemData.make(STARTING_FUEL_TANK, race_id)
 	ship.gripper = ItemData.make(STARTING_GRIPPER, race_id)
+	ship.radar = ItemData.make(STARTING_RADAR, race_id)
 	ship.weapons.assign([ItemData.make(STARTING_WEAPON, race_id)])
 	ship.hull_hp = armor(ship.hull)
 	apply_stats(ship)
@@ -246,6 +288,10 @@ static func describe(item: ItemData) -> String:
 			return "Fuel %d" % int(stats.get("capacity", 0))
 		"gripper":
 			return "Pick-up range %d" % int(stats.get("range", 0))
+		"radar":
+			return "Sees ships up to %d away" % int(stats.get("range", 0))
+		"shield":
+			return "Stops %d%% of every hit" % roundi(float(stats.get("absorb", 0.0)) * 100.0)
 		"weapon":
 			var damage: Array = stats.get("damage", [0, 0])
 			var text := "%s · Damage %d-%d · Range %d" % [WEAPON_TYPE_NAMES.get(weapon_type(item), "?"), int(damage[0]), int(damage[1]), int(weapon_range(item))]

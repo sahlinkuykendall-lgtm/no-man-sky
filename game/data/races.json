@@ -1,20 +1,25 @@
 {
-	"_comment": "The five playable races. Names are placeholders (see docs/MASTER_DESIGN.md section 11). 'prices' multiplies the price of some goods on that race's planets. 'illegal_goods' are banned on all of the race's planets, whatever the government. 'manufacturing' changes ships and equipment made by the race: price, weight, how fast they wear, and hull armor (Veyari: best and priciest; Skarn: cheap but wear fast; Gorruk: heavy and tough).",
+	"_comment": "The five playable races. Names are placeholders (see docs/MASTER_DESIGN.md section 11). 'prices' multiplies the price of some goods on that race's planets. 'illegal_goods' are banned on all of the race's planets, whatever the government. 'manufacturing' changes ships and equipment made by the race: price, weight, how fast they wear, and hull armor (Veyari: best and priciest; Skarn: cheap but wear fast; Gorruk: heavy and tough). 'personality' (0-1) sets how their pilots answer hails: 'greed' (take bribes), 'courage' (resist threats and demands), 'helpful' (join your fights, share news).",
 	"races": [
 		{ "id": "human", "name": "Humans", "adjective": "Human", "color": "#5b9dff", "description": "Adaptable traders and diplomats.",
 			"prices": {}, "illegal_goods": [],
-			"manufacturing": { "price": 1.0, "weight": 1.0, "wear": 1.0, "armor": 1.0 } },
+			"manufacturing": { "price": 1.0, "weight": 1.0, "wear": 1.0, "armor": 1.0 },
+			"personality": { "greed": 0.5, "courage": 0.5, "helpful": 0.5 } },
 		{ "id": "veyari", "name": "Veyari", "adjective": "Veyari", "color": "#4fe0b5", "description": "Ancient, serene and technologically supreme.",
 			"prices": { "technology": 0.8, "luxuries": 1.2, "weapons": 1.2 }, "illegal_goods": [],
-			"manufacturing": { "price": 1.35, "weight": 0.85, "wear": 0.6, "armor": 1.1 } },
+			"manufacturing": { "price": 1.35, "weight": 0.85, "wear": 0.6, "armor": 1.1 },
+			"personality": { "greed": 0.2, "courage": 0.8, "helpful": 0.7 } },
 		{ "id": "lumari", "name": "Lumari", "adjective": "Lumari", "color": "#f1e36a", "description": "Brilliant, frail scientists allied with the Veyari.",
 			"prices": { "medicine": 0.8, "technology": 0.9, "food": 1.15 }, "illegal_goods": ["alcohol"],
-			"manufacturing": { "price": 1.2, "weight": 0.9, "wear": 0.8, "armor": 0.9 } },
+			"manufacturing": { "price": 1.2, "weight": 0.9, "wear": 0.8, "armor": 0.9 },
+			"personality": { "greed": 0.3, "courage": 0.3, "helpful": 0.8 } },
 		{ "id": "skarn", "name": "Skarn", "adjective": "Skarn", "color": "#e3923f", "description": "Cunning smugglers who work for whoever pays.",
 			"prices": { "narcotics": 0.8, "luxuries": 0.9, "medicine": 1.15 }, "illegal_goods": [],
-			"manufacturing": { "price": 0.8, "weight": 1.05, "wear": 1.4, "armor": 0.95 } },
+			"manufacturing": { "price": 0.8, "weight": 1.05, "wear": 1.4, "armor": 0.95 },
+			"personality": { "greed": 0.9, "courage": 0.35, "helpful": 0.3 } },
 		{ "id": "gorruk", "name": "Gorruk", "adjective": "Gorruk", "color": "#e2524b", "description": "Massive warriors who live for honor and glory.",
 			"prices": { "weapons": 0.8, "alcohol": 1.25, "technology": 1.2 }, "illegal_goods": [],
-			"manufacturing": { "price": 0.9, "weight": 1.2, "wear": 0.9, "armor": 1.3 } }
+			"manufacturing": { "price": 0.9, "weight": 1.2, "wear": 0.9, "armor": 1.3 },
+			"personality": { "greed": 0.4, "courage": 0.95, "helpful": 0.5 } }
 	]
 }

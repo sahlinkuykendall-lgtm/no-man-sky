@@ -109,13 +109,13 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 36 | Testing (2026-10-10) | A small built-in test runner (`tests/run_tests.gd`) plus a headless smoke test that plays the game. This replaces the GUT plugin to avoid an external dependency |
 | 37 | Hyperspace departure (2026-10-10) | As in SR2, ships must fly out to the system's **hyperspace boundary** (dashed purple ring) before jumping. Fuel = 1 per parsec, and transit takes 1 day per 8 pc |
 | 38 | Market prices (M2) | Price = base × economy × tech level × government × race × a small fixed per-planet quirk × event × supply. Supply: fewer units in stock means a higher price. Each market buys 5% below and sells 5% above its middle price, so buying and selling straight back always loses money. Stock drifts back to normal by 8% of the gap per day. Numbers live in `game/data/goods.json`, `world.json` and `races.json` |
-| 39 | Contraband & black market (M2) | Illegal goods (by government, §11, plus race bans) can still be traded on the planet's **black market**: 40% pricier, less stock, and each deal risks a sting (fine + confiscation). Police scan ships that arrive at a planet with cargo (chance by government) and confiscate contraband with a fine. Anarchies scan nothing. Wanted status and karma come later (M5–M7) |
+| 39 | Contraband & black market (M2) | Illegal goods (by government, §11, plus race bans) can still be traded on the planet's **black market**: 40% pricier, less stock, and each deal risks a sting (fine + confiscation). Police scan ships that arrive at a planet with cargo (chance by government) and confiscate contraband with a fine. Anarchies scan nothing. Karma and wanted status arrived in M5 (#60, #61) |
 | 40 | Lumari ban alcohol (M2) | Gives §10's "Alcohol: illegal on some worlds" a home: it's illegal on every Lumari world |
-| 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold (about 62 t since M4, see #57). Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free until M5 gives them real trading |
+| 41 | Starting money & fuel (M2) | Start with **2,500 cr** and a **60-ton** hold (62 t since M4, see #57, and 60 t since M5's radar, see #59). Fuel now costs money (9–14 cr/unit by government). A pilot who can't afford fuel gets free emergency fuel up to 14 units (enough to reach a neighbouring system) from the Ranger Corps, so nobody is ever stranded. NPC ships still refuel free (since M5 NPC traders really buy and sell, see #64) |
 | 42 | Trading takes no time (M2) | Landing (L) on an inhabited planet you orbit opens its market. Trading is instant and costs no turn, like SR2. Credits live on the player's ship until pilots/characters are their own data (M15) |
-| 43 | Ship = hull + equipment (M3) | A ship is built from a **hull** plus one item per equipment slot. M3 has the hull, **engine** and **fuel tank**. Weapons (M4), radar, scanner, gripper, repair droid and shield (M4–M5) plug into the same system later. The ship's stats come from its items: speed, jump range and hyperspace speed from the engine, fuel capacity from the tank, armor (max hull HP) from the hull. Models and numbers live in `game/data/equipment.json` |
+| 43 | Ship = hull + equipment (M3) | A ship is built from a **hull** plus one item per equipment slot. M3 has the hull, **engine** and **fuel tank**. Weapons and the gripper (M4) and radar and shield (M5, #59) plug into the same system; scanner and repair droid come later. The ship's stats come from its items: speed, jump range and hyperspace speed from the engine, fuel capacity from the tank, armor (max hull HP) from the hull. Models and numbers live in `game/data/equipment.json` |
 | 44 | Weight vs cargo (M3) | Like SR2, a hull's **size** is shared between equipment and cargo: cargo space = hull size − weight of everything installed. Better engines are heavier, so you trade hold space for speed. A purchase is refused if the new cargo space would be smaller than what you carry |
-| 45 | Race of manufacture (M3) | Every shipyard sells only its own race's models, up to the planet's tech level. Each race changes price, weight, wear and armor (`races.json` → `manufacturing`): Veyari gear is pricey, light and long-lasting; Lumari gear is light; Skarn gear is cheap but wears fast; Gorruk hulls are tough but heavy; Human gear is the baseline. The player starts with a Courier hull, Spark Drive and Standard Tank built by their own race (a human pilot has speed 170, jump 20 pc, fuel 30 and a 60 t hold; since M4 also a Basic Gripper and a Pulse Laser, with a 62 t hold) |
+| 45 | Race of manufacture (M3) | Every shipyard sells only its own race's models, up to the planet's tech level. Each race changes price, weight, wear and armor (`races.json` → `manufacturing`): Veyari gear is pricey, light and long-lasting; Lumari gear is light; Skarn gear is cheap but wears fast; Gorruk hulls are tough but heavy; Human gear is the baseline. The player starts with a Courier hull, Spark Drive and Standard Tank built by their own race (a human pilot has speed 170, jump 20 pc, fuel 30 and a 60 t hold; since M4 also a Basic Gripper and a Pulse Laser, with a 62 t hold; since M5 also a Basic Radar, with a 60 t hold) |
 | 46 | Wear (M3) | Engines wear a little every day of flying and more on each hyperspace jump. Fuel tanks wear on jumps. Above 50% condition an item works at full power; below 50% it loses power, down to **half power at 0%**. It never breaks completely in M3. The hull's condition is its HP (damage arrives with combat in M4). The player gets a warning when an item drops below 50% |
 | 47 | Shipyard prices (M3) | Buying a new item **trades in** the old one for up to 60% of its price (40% of that is kept even when worn out). Repairing an item from 0% to 100% costs 35% of its price; hull repairs cost 8 cr per HP (3 cr since M4, see #57) (times the maker's price factor). A pilot who can't afford a full repair pays for what they can, and the Ranger Corps patches the engine and tank up to 50% for free, so nobody is stranded |
 | 48 | Hyperspace speed (M3) | Replaces the fixed "1 day per 8 pc" from Decision #37: transit speed now comes from the engine (8–14 pc/day) |
@@ -124,11 +124,20 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 | 51 | Safe orbits (M4) | Ships in orbit of an **inhabited planet** are protected by its defenses: they can't shoot or be shot. Traders under fire flee there, and so can you |
 | 52 | Death = rescue (M4) | First version of #33. When your hull reaches 0, the Ranger Corps tows the wreck to the nearest inhabited planet (in the same system if there is one, otherwise your race's home system). It costs **20% of your credits**, your cargo is left in a container where you were destroyed, and the hull is patched to 30%. Hardcore mode comes later |
 | 53 | Pirates & danger (M4) | Pirates come in three loadouts (Raider, Marauder, Warlord) in `game/data/npcs.json`. Each system has a normal number of pirates. Race home systems have none, and the farther a system is from every home system, the more and tougher its pirates (danger = distance to the nearest home ÷ 30 pc). Pirates hunt any non-pirate ship within 500 units that isn't in a safe orbit, and give up beyond 900. Destroyed pirates and traders are slowly replaced (4% chance per day per system); new pirates arrive at the hyperspace boundary |
-| 54 | Bounties, and no attacking traders yet (M4) | The Ranger Corps pays a **bounty** for every pirate the player helps destroy (350 / 900 / 2,200 cr). The player can't attack peaceful ships yet. Piracy as a player choice comes with karma and police in M5 |
+| 54 | Bounties, and no attacking traders yet (M4) | The Ranger Corps pays a **bounty** for every pirate the player helps destroy (350 / 900 / 2,200 cr). In M4 the player couldn't attack peaceful ships. Since M5 they can, but it is a crime (#60) |
 | 55 | Loot & gripper (M4) | Destroyed ships leave a **cargo container** with 40–80% of their cargo plus **Salvage** (a new good: scrap that industrial worlds pay well for). Containers drift away after 20 days. The **gripper** is a new equipment slot (every pilot starts with a Basic Gripper). At the end of each turn it picks up every container within its range, as far as the hold allows |
 | 56 | Asteroids (M4) | About 45% of systems have an asteroid belt beyond the last planet. Shoot a rock to break it into minerals (pick them up with the gripper). Broken rocks are replaced after 20–40 days |
 | 57 | Combat rebalance (M4) | The Courier grows to 90 t so the new starting gripper and laser still leave a human pilot a 62 t hold. Hull armor is raised (Courier 100 … Gunship 480). Hull repair drops to **3 cr per HP** (replaces the 8 cr in #47) because hulls now take damage often. Police scans only check the player for now (NPC traders carry nothing illegal) |
 | 58 | Save version 4 (M4) | Old saves are upgraded: the player gets a gripper and a Pulse Laser, systems get asteroid belts, and the NPC traders are replaced by new, equipped traders and pirates |
+| 59 | Shields & radar (M5) | Two new equipment slots. A **shield** stops a share of every hit (Deflector 10%, Barrier 18%, Aegis 27%, Bastion 36%; tech 2–8) and wears a little with each hit it takes. A **radar** sets how far you can see other ships (Basic 700 … Omni 2,000 units; tech 1–7). Ships beyond your radar are hidden on screen and can't be selected or hailed, unless you are fighting them. Without a radar you still see 350 units. Every pilot starts with a Basic Radar (2 t, so a human hold is now 60 t). NPCs also spot enemies by radar |
+| 60 | Karma & crimes (M5) | Every pilot has **karma**, shown as a reputation: Hero (60+), Honored (30+), Respected (10+), Neutral, Shady (−5 or less), Criminal (−20 or less), Notorious (−50 or less). Destroying a pirate gives +3. Attacking a peaceful ship (assault, −2, 250 cr fine), destroying one (murder, −12, 1,500 cr) and robbing a trader by hail (extortion, −4, 400 cr) are crimes. Crimes against pirates don't count. Pirates leave pilots at karma −30 or lower alone. Numbers live in the `law` section of `world.json` |
+| 61 | Wanted & fines (M5) | A crime in a system with a government makes you **wanted** by that system's race, with a fine. While wanted, that race's planets won't trade, refuel or repair you, their planets don't protect you in orbit, and their police hunt you. **Hail one of their planets to pay the fine.** Unpaid fines shrink by 2% a day and are dropped below 50 cr. Anarchies have no police: crimes there only cost karma |
+| 62 | Police (M5) | Each system has police ships of its race: the highest `police` number among its planets' governments (dictatorship 2, monarchy/republic/democracy 1, anarchy 0), +1 at a race's home system. They guard the space near inhabited planets: they attack pirates that come within **300 units** of one (and give up the chase at 600), and pilots their race wants anywhere in the system. Pirates don't hunt inside those guarded zones, so the space around planets is safer and the open space between them is where pirates lurk. Police are replaced like other NPCs. Patrol (Fighter) and Enforcer (Heavy Fighter) loadouts are in `npcs.json` |
+| 63 | NPC rangers & ranking (M5) | **10 NPC rangers** roam the whole galaxy hunting pirates: they fly to pirates in their system, or jump to the reachable system with the most pirates. They earn bounties like the player, and rest and repair at planets (lawful ships get free repairs and fuel). Every pirate destroyed earns **ranking points** (10% of its bounty). The **Ranger Corps board** ranks the player among the NPC rangers. Rookie and Veteran loadouts are in `npcs.json` |
+| 64 | NPC trading (M5) | NPC traders now really trade: they sell their cargo where they arrive, then look for the most profitable legal deal (profit per day of travel, at least 10% margin) at their own system and the 4 nearest inhabited systems in jump range, buy up to half the stock, and travel there. Their buying and selling moves prices like the player's trades. A trader that goes broke gets a small loan. Traders count for the whole galaxy, so they spread out on their own |
+| 65 | Hailing & personality (M5) | First version of §7. Hail (H) a ship on your radar or an inhabited planet in your system. Ships: **news** (prices or pirate tips), **ask for help** (police and rangers join your attack on a pirate), **demand cargo** (traders drop half their cargo: extortion), **bribe** (pirates, or police that want you: 200 cr + 10% of your money buys a 6-day truce), **threaten** (pirates back off if you are clearly stronger, or attack), **surrender** (give pirates half your cargo for a truce). Planets: news, pay your fine. Answers depend on each race's **personality** (greed, courage, helpful in `races.json`): Skarn take bribes, Gorruk don't scare, Veyari and Lumari are helpful. Answers are seeded, so asking twice the same day gives the same answer. Numbers live in the `comms` section of `npcs.json` |
+| 66 | Galactic news (M5) | A news feed (the last 40 headlines) records market events, pirates destroyed by rangers and the player, traders lost to pirates, crimes, and a daily total of pirates destroyed by police. The latest headline shows under the status bar, and the full list is on the Ranger Corps board (R) |
+| 67 | Save version 5 (M5) | Old saves are upgraded: the player gets a Basic Radar if it fits, and all NPCs are replaced by the M5 population (traders, pirates, police and rangers) |
 
 ---
 
@@ -225,8 +234,13 @@ These answers come from the kickoff Q&A. Add new decisions at the bottom with a 
 - **Pirates:** Decision #53. A pirate that spots you sends a warning ("…is coming for you!"), and Auto stops. Flee to an inhabited planet (safe orbit, Decision #51) or fight. Bounties: Decision #54.
 - **Loot and asteroids:** Decisions #55 and #56. Click a container to fly to it; the gripper picks it up when you're close.
 - **Losing:** Decision #52.
-- **NPC traders** now carry real equipment and cargo, flee to the nearest inhabited planet when shot, and leave wrecks with their cargo. They still don't really trade (M5).
-- **Not yet:** shields, radar, scanner, repair droids, skills, police and rangers fighting pirates, NPCs travelling between systems, hailing (all M5), and Ascendancy cores (M6).
+- **NPC traders** carry real equipment and cargo, flee to the nearest inhabited planet when shot, and leave wrecks with their cargo. Since M5 they really trade (Decision #64).
+
+### How the prototype works (Milestone 5)
+- **Shields and radar:** Decision #59. Shields are bought in the Shipyard like any other item. Ships beyond your radar range (the faint blue circle) are hidden.
+- **Attacking anyone:** you can now select any ship and press **T**. For a peaceful ship the button warns "Attack: a crime!" (Decisions #60 and #61).
+- **Who is out there:** pirates are red, police blue, rangers green, and traders the color of their race. Police and rangers fight pirates on their own (Decisions #62 and #63), so the galaxy changes even when you are not around.
+- **Not yet:** scanner, repair droids, skills (Accuracy, Maneuverability, Charisma), per-weapon targets, shooting down missiles, and Ascendancy cores (M6).
 
 ---
 
@@ -258,6 +272,11 @@ You can **hail any ship, planet or station** in the system, like SR2's comms. Wh
 - **Veyari** rarely accept threats; they respond to diplomacy.
 - **Gorruk** respect strength and may accept a duel challenge; they despise begging.
 - **Skarn** accept bribes easily, and might sell you out.
+
+### How the prototype works (Milestone 5)
+- Select a ship (on your radar) or an inhabited planet and press **Hail (H)**. A window shows who you are talking to, what their race is known for, their answer, and one button per option. No time passes while it is open.
+- **Options so far:** Decision #65. Help, joint attacks and hiring for your fleet need fleets and skills (later milestones). Charisma comes with skills; for now only the race personality and the strength of both ships count.
+- **Planets:** ask for the news, or pay your fine when the planet's race wants you (Decision #61). Requesting landing, military support and reporting crimes come later.
 
 ---
 
@@ -433,6 +452,12 @@ At character creation you pick a **race** and a **background**. It sets your sta
 | **Pirates** | Prey on traders, extort, smuggle, raid |
 | **Mercenaries** | Hire-for-pay fighters |
 | **Smugglers** | Run contraband past police |
+
+### How the prototype works (Milestone 5)
+- **NPC roles so far:** traders (#64), pirates (#53), police (#62) and rangers (#63). Liners, diplomats, warships, mercenaries and smugglers come later.
+- **Karma and reputation:** Decision #60. Your reputation and Ranger rank are shown under the status bar, together with **WANTED** and your fines (red when the system you are in wants you).
+- **Ranger Corps board (R):** the ranking of all rangers by points, your reputation and fines, and the galactic news (#66).
+- **Not yet:** titles, starting backgrounds and better missions for high karma (M7).
 
 ### Karma / reputation drives your "role"
 - **Karma** (hidden-ish, shown as a reputation descriptor) goes down when you attack innocents, extort, smuggle or break deals.
@@ -923,7 +948,7 @@ Content is defined in **data files**, so AIs can add it without code changes: go
 ### Testing
 - A built-in runner, `tests/run_tests.gd`, runs every `tests/**/test_*.gd` (each one extends `TestCase`). The economy, combat math and turn resolution must be tested.
 - A test also fails if it logs a script error, even when its asserts pass.
-- `tests/smoke_test.gd` plays the real game headlessly (trading, the shipyard, flying, jumping and a pirate fight) and fails on any logged error.
+- `tests/smoke_test.gd` plays the real game headlessly (trading, the shipyard, flying, jumping, a pirate fight, the Ranger Corps board and hailing) and fails on any logged error.
 - GitHub Actions runs both on every push.
 
 ---
@@ -939,7 +964,7 @@ The order is chosen so each milestone produces something **playable** and later 
 | **M2 Trade** ✅ | Goods, planet markets, supply/demand, land menu, cargo | Make money trading |
 | **M3 Ships & Gear** ✅ | Hull and equipment slots, shop, wear, repair, fuel, hyperspace jump (no Rift Run yet) | Upgrade your ship |
 | **M4 Space Combat** ✅ | Turn-based weapons, NPC pirates, loot, gripper, asteroids | Fight and loot |
-| **M5 Living Galaxy** | NPC traders, pirates, police, rangers with AI; news ticker; hailing and negotiation | Galaxy runs without you |
+| **M5 Living Galaxy** ✅ | NPC traders, pirates, police, rangers with AI; news ticker; hailing and negotiation | Galaxy runs without you |
 | **M6 Ascendancy War** | Invasion and liberation simulation, under-attack alerts, cores and Ranger Hub | The war plays out |
 | **M7 Missions** | Government missions (all space types), difficulty negotiation, mission log | SR2 loop complete |
 | **M8 Planet Landing (wild)** | Landing cinematic, zone terrain gen, FPS controller, multi-tool, resources | Walk on planets |

@@ -5,6 +5,8 @@ extends RefCounted
 const ROLE_PLAYER := "player"
 const ROLE_TRADER := "trader"
 const ROLE_PIRATE := "pirate"
+const ROLE_POLICE := "police"
+const ROLE_RANGER := "ranger" ## NPC rangers (the player is a ranger too, with ROLE_PLAYER).
 
 var id: int = -1
 var name: String = ""
@@ -22,6 +24,8 @@ var hull: ItemData = null
 var engine: ItemData = null
 var fuel_tank: ItemData = null
 var gripper: ItemData = null
+var radar: ItemData = null
+var shield: ItemData = null
 var weapons: Array[ItemData] = [] ## Up to the hull's number of weapon slots.
 var hull_hp: float = 0.0 ## The ship is destroyed when this reaches 0.
 
@@ -59,11 +63,23 @@ var target_id: int = -1
 var pursue: bool = false ## Fly after the target to keep it in weapon range.
 var bounty: int = 0 ## Pirates: what the Ranger Corps pays for destroying this ship.
 
+# Law and reputation (see Law).
+var karma: int = 0 ## Goes down for crimes, up for destroying pirates.
+var wanted: Dictionary = {} ## race id -> unpaid fine. Wanted by that race's police.
+
+# Ranger ranking (the player and NPC rangers).
+var kills: int = 0 ## Pirates destroyed.
+var points: int = 0 ## Ranking points.
+
 # Simple NPC memory.
 var idle_days: int = 0
+var truce: Dictionary = {} ## ship id -> days left. Won't attack that ship (bribed, scared off...).
+var plan_system_id: int = -1 ## Traders and rangers: where they are heading next.
+var plan_planet_id: int = -1
 
 
-## The item in a single slot: "hull", "engine", "fuel_tank" or "gripper" (null if empty).
+## The item in a single slot: "hull", "engine", "fuel_tank", "gripper", "radar" or "shield"
+## (null if empty).
 ## Weapons have several slots: see `weapons`.
 func slot(kind: String) -> ItemData:
 	match kind:
@@ -75,6 +91,10 @@ func slot(kind: String) -> ItemData:
 			return fuel_tank
 		"gripper":
 			return gripper
+		"radar":
+			return radar
+		"shield":
+			return shield
 	return null
 
 
@@ -88,12 +108,16 @@ func set_slot(kind: String, item: ItemData) -> void:
 			fuel_tank = item
 		"gripper":
 			gripper = item
+		"radar":
+			radar = item
+		"shield":
+			shield = item
 
 
-## Everything installed in the hull (engine, fuel tank, gripper and weapons).
+## Everything installed in the hull (engine, fuel tank, gripper, radar, shield and weapons).
 func equipment() -> Array[ItemData]:
 	var items: Array[ItemData] = []
-	for item in [engine, fuel_tank, gripper]:
+	for item in [engine, fuel_tank, gripper, radar, shield]:
 		if item != null:
 			items.append(item)
 	items.append_array(weapons)
@@ -113,6 +137,24 @@ func clear_target() -> void:
 
 func is_pirate() -> bool:
 	return role == ROLE_PIRATE
+
+
+## Rangers and the police hunt pirates.
+func is_lawful_fighter() -> bool:
+	return role == ROLE_POLICE or role == ROLE_RANGER
+
+
+## True while this ship has agreed not to attack the ship `other_id`.
+func has_truce_with(other_id: int) -> bool:
+	return int(truce.get(other_id, 0)) > 0
+
+
+## Unpaid fines with every race, added up.
+func total_fines() -> int:
+	var total := 0
+	for fined_race: String in wanted:
+		total += int(wanted[fined_race])
+	return total
 
 
 ## Total units of cargo on board.
@@ -171,6 +213,8 @@ func to_dict() -> Dictionary:
 		"engine": _item_to_dict(engine),
 		"fuel_tank": _item_to_dict(fuel_tank),
 		"gripper": _item_to_dict(gripper),
+		"radar": _item_to_dict(radar),
+		"shield": _item_to_dict(shield),
 		"weapons": weapon_dicts,
 		"target_kind": target_kind,
 		"target_id": target_id,
@@ -189,6 +233,13 @@ func to_dict() -> Dictionary:
 		"jump_origin_system_id": jump_origin_system_id,
 		"jump_days_left": jump_days_left,
 		"idle_days": idle_days,
+		"karma": karma,
+		"wanted": wanted.duplicate(),
+		"kills": kills,
+		"points": points,
+		"truce": _int_keys_to_strings(truce),
+		"plan_system_id": plan_system_id,
+		"plan_planet_id": plan_planet_id,
 	}
 
 
@@ -209,7 +260,7 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.jump_speed = float(d.get("jump_speed", 8.0))
 	s.hull_hp = float(d.get("hull_hp", 0.0))
 	s.hull_hp_max = float(d.get("hull_hp_max", 0.0))
-	for kind: String in ["hull", "engine", "fuel_tank", "gripper"]:
+	for kind: String in Equipment.SINGLE_SLOT_KINDS:
 		var item_dict: Variant = d.get(kind)
 		if item_dict is Dictionary:
 			s.set_slot(kind, ItemData.from_dict(item_dict))
@@ -234,6 +285,17 @@ static func from_dict(d: Dictionary) -> ShipData:
 	s.jump_origin_system_id = int(d.get("jump_origin_system_id", -1))
 	s.jump_days_left = int(d.get("jump_days_left", 0))
 	s.idle_days = int(d.get("idle_days", 0))
+	s.karma = int(d.get("karma", 0))
+	var fines: Dictionary = d.get("wanted", {})
+	for fined_race: String in fines:
+		s.wanted[fined_race] = int(fines[fined_race])
+	s.kills = int(d.get("kills", 0))
+	s.points = int(d.get("points", 0))
+	var truces: Dictionary = d.get("truce", {})
+	for other_id: String in truces:
+		s.truce[int(other_id)] = int(truces[other_id])
+	s.plan_system_id = int(d.get("plan_system_id", -1))
+	s.plan_planet_id = int(d.get("plan_planet_id", -1))
 	return s
 
 
@@ -242,6 +304,14 @@ static func _item_to_dict(item: ItemData) -> Variant:
 	if item == null:
 		return null
 	return item.to_dict()
+
+
+## JSON only allows text keys, so number keys are saved as text.
+static func _int_keys_to_strings(dict: Dictionary) -> Dictionary:
+	var result := {}
+	for key: int in dict:
+		result[str(key)] = dict[key]
+	return result
 
 
 static func _vec(a: Array) -> Vector2:

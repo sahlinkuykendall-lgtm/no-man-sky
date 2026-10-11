@@ -1,7 +1,7 @@
 extends SceneTree
 ## Plays the real game headlessly for a while (menu -> new game -> trade -> shipyard -> fly -> jump ->
-## fight a pirate -> pick up its wreck -> save/load -> back to menu) and fails if any script
-## error or warning was logged.
+## fight a pirate -> pick up its wreck -> ranger board -> hail a ship and a planet -> save/load ->
+## back to menu) and fails if any script error or warning was logged.
 ##
 ## Usage: godot --headless -s res://tests/smoke_test.gd
 
@@ -152,6 +152,39 @@ func _run() -> void:
 		turn_manager.set_auto_advance(true)
 		await _wait_until(func() -> bool: return not turn_manager.auto_advance and not turn_manager.is_resolving, 30.0)
 		_check(ship.cargo_used() > cargo_before, "gripper picked nothing up")
+
+	# The living galaxy: the Ranger Corps board, hailing a ship, and hailing a planet to
+	# pay a fine.
+	hud.call("_toggle_ranger_board")
+	await _frames(2)
+	_check(hud.get("_ranger_board").call("is_open"), "ranger board did not open")
+	hud.call("_toggle_ranger_board")
+	var hail_window: Node = hud.get("_hail_window")
+	for other in galaxy.ships_in_system(ship.system_id):
+		if not other.is_player and Equipment.on_radar(ship, other):
+			event_bus.selection_changed.emit("ship", other.id)
+			await _frames(2)
+			hud.call("_open_hail_window")
+			_check(hail_window.call("is_open"), "hail window did not open for a ship")
+			hail_window.call("_send", "news")
+			await _frames(2)
+			hail_window.call("close")
+			break
+	var inhabited := galaxy.get_system(ship.system_id).inhabited_planets()
+	_check(not inhabited.is_empty(), "the test system should be inhabited")
+	if not inhabited.is_empty():
+		var hailed := inhabited[0]
+		ship.wanted[hailed.race_id] = 300
+		ship.credits += 1000
+		event_bus.selection_changed.emit("planet", hailed.id)
+		await _frames(2)
+		hud.call("_open_hail_window")
+		_check(hail_window.call("is_open"), "hail window did not open for a planet")
+		hail_window.call("_send", "news")
+		hail_window.call("_send", "pay_fine")
+		await _frames(2)
+		_check(not ship.wanted.has(hailed.race_id), "paying a fine by hailing failed")
+		hail_window.call("close")
 
 	# Click in space, save, load, and go back to the menu.
 	main.get_node("Game").get_child(0).call("_on_left_click", Vector2(300, 300))

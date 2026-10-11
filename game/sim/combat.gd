@@ -7,12 +7,17 @@ extends RefCounted
 ## is in range fires once. All ships fire at the same moment, so a ship destroyed this
 ## turn still gets its last shots off. Then:
 ##   - destroyed NPC ships leave a cargo container (part of their cargo plus salvage),
-##     and the Ranger Corps pays the player a bounty for every pirate they destroy;
+##     and the Ranger Corps pays a bounty (to the player or an NPC ranger) for every
+##     pirate destroyed;
 ##   - a destroyed player ship is towed to a planet by the Ranger Corps (Decision #52);
 ##   - ships with a gripper pick up containers within its range.
 ##
+## Shields take a share off every hit (and wear a little each time).
+## Shooting at a ship that is not a pirate is a crime (see Law).
+##
 ## Ships in orbit of an inhabited planet are protected by its defenses: they can't shoot
-## or be shot. That is where traders (and players) flee to.
+## or be shot. That is where traders (and players) flee to. Pilots wanted by the planet's
+## race get no protection.
 
 const TARGET_SHIP := "ship"
 const TARGET_ASTEROID := "asteroid"
@@ -30,9 +35,10 @@ const ASTEROID_RESPAWN_DAYS := Vector2i(20, 40)
 ## A ship spotted the ship `ship_id` and is attacking it. {"ship_id" (victim), "attacker_id"}
 const EVENT_UNDER_ATTACK := "under_attack"
 ## A weapon fired. {"ship_id" (shooter), "system_id", "target_kind", "target_id",
-## "weapon_type", "damage", "from", "to" (positions)}
+## "weapon_type", "damage" (after the shield), "blocked" (stopped by the shield), "from", "to" (positions)}
 const EVENT_SHOT := "shot"
-## {"ship_id" (the destroyed ship), "system_id", "killer_id", "name", "role", "bounty", "position"}
+## {"ship_id" (the destroyed ship), "system_id", "killer_id", "killer_name", "killer_role", "name",
+## "role", "bounty", "position"}
 const EVENT_SHIP_DESTROYED := "ship_destroyed"
 ## {"ship_id" (shooter), "system_id", "asteroid_id", "position", "minerals"}
 const EVENT_ASTEROID_DESTROYED := "asteroid_destroyed"
@@ -46,9 +52,11 @@ const EVENT_COLLECTED := "collected"
 
 # --- Questions about targets -------------------------------------------------------
 
-## True if the ship is in orbit of an inhabited planet (protected by its defenses).
+## True if the ship is in orbit of an inhabited planet (protected by its defenses),
+## unless that planet's race wants the pilot.
 static func is_protected(galaxy: GalaxyData, ship: ShipData) -> bool:
-	return Trade.market_planet(galaxy, ship) != null
+	var planet := Trade.market_planet(galaxy, ship)
+	return planet != null and not Law.is_wanted_by(ship, planet.race_id)
 
 
 ## Can `attacker` shoot at `victim` right now (ignoring range)?
@@ -90,6 +98,17 @@ static func engage_distance(ship: ShipData) -> float:
 	return maxf(MIN_ENGAGE_DISTANCE, Equipment.min_weapon_range(ship) * ENGAGE_FACTOR)
 
 
+## How strong a fighter the ship is: hull (made tougher by the shield) times the damage
+## its weapons deal per day. Used when ships size each other up (see Comms).
+static func strength(ship: ShipData) -> float:
+	var damage_per_day := 0.0
+	for weapon in ship.weapons:
+		if Equipment.can_fire(weapon):
+			var span := Equipment.weapon_damage(weapon)
+			damage_per_day += (span.x + span.y) / 2.0
+	return ship.hull_hp / maxf(0.1, 1.0 - Equipment.shield_absorb(ship)) * damage_per_day
+
+
 ## Can the ship fire at its target this turn (range aside)?
 static func can_fire_at_target(galaxy: GalaxyData, ship: ShipData) -> bool:
 	if ship.weapons.is_empty() or not target_exists(galaxy, ship):
@@ -113,6 +132,7 @@ static func resolve(galaxy: GalaxyData, events: Array[Dictionary]) -> void:
 			_fire_weapons(galaxy, ship, damage, attackers, events)
 
 	# 2. Hulls take the damage. Victims fight back (or flee, if they are traders).
+	#    Shooting at peaceful ships is a crime.
 	for ship_id: int in damage:
 		var victim := galaxy.get_ship(ship_id)
 		victim.hull_hp = maxf(0.0, victim.hull_hp - float(damage[ship_id]))
@@ -120,9 +140,14 @@ static func resolve(galaxy: GalaxyData, events: Array[Dictionary]) -> void:
 		if not victim.has_target() and not victim.weapons.is_empty():
 			victim.target_kind = TARGET_SHIP
 			victim.target_id = attacker.id
-			victim.pursue = victim.is_pirate()
+			victim.pursue = not victim.is_player # NPCs chase whoever shot them.
 		if victim.role == ShipData.ROLE_TRADER:
-			_flee_to_planet(galaxy, victim)
+			flee_to_planet(galaxy, victim)
+		for attacker_id: int in attackers[ship_id]:
+			victim.truce.erase(attacker_id) # Any deal with the shooter is off.
+			var shooter := galaxy.get_ship(attacker_id)
+			if shooter.is_player:
+				Law.commit_crime(galaxy, shooter, victim, Law.CRIME_ASSAULT, events)
 
 	# 3. Ships with no hull left are destroyed.
 	for ship_id: int in damage:
@@ -136,6 +161,9 @@ static func resolve(galaxy: GalaxyData, events: Array[Dictionary]) -> void:
 		if wreck.is_player:
 			_rescue_player(galaxy, wreck, events)
 		else:
+			var killer := galaxy.get_ship(killer_id) # null if it was destroyed this turn too.
+			if killer != null and killer.is_player:
+				Law.commit_crime(galaxy, killer, wreck, Law.CRIME_MURDER, events)
 			_destroy_npc(galaxy, wreck, killer_id, events)
 
 	# 4. Grippers pick up cargo containers.
@@ -176,21 +204,34 @@ static func _fire_weapons(galaxy: GalaxyData, ship: ShipData, damage: Dictionary
 		if weapon.max_ammo() > 0:
 			weapon.ammo -= 1
 		Equipment.wear_weapon(weapon)
-		events.append({"type": EVENT_SHOT, "ship_id": ship.id, "system_id": ship.system_id, "target_kind": ship.target_kind,
-			"target_id": ship.target_id, "weapon_type": Equipment.weapon_type(weapon), "damage": int(hit),
-			"from": ship.position, "to": target_at})
+		var event := {"type": EVENT_SHOT, "ship_id": ship.id, "system_id": ship.system_id, "target_kind": ship.target_kind,
+			"target_id": ship.target_id, "weapon_type": Equipment.weapon_type(weapon), "damage": int(hit), "blocked": 0,
+			"from": ship.position, "to": target_at}
+		events.append(event)
 		if ship.target_kind == TARGET_ASTEROID:
 			_damage_asteroid(galaxy, ship, hit, events)
 			continue
-		_add_damage(damage, attackers, ship.target_id, hit, ship.id)
+		var target := galaxy.get_ship(ship.target_id)
+		var landed := _shielded(target, hit)
+		event["damage"] = int(landed)
+		event["blocked"] = int(hit - landed)
+		_add_damage(damage, attackers, target.id, landed, ship.id)
 		# Fragment weapons also hit the target's allies close to it.
 		var splash := float(weapon.stats().get("splash", 0.0))
 		if splash > 0.0:
-			var target := galaxy.get_ship(ship.target_id)
 			for other in galaxy.ships_in_system(ship.system_id):
 				if other != target and other.is_pirate() == target.is_pirate() and other.position.distance_to(target_at) <= splash \
 						and can_attack_ship(galaxy, ship, other):
-					_add_damage(damage, attackers, other.id, roundf(hit * SPLASH_DAMAGE), ship.id)
+					_add_damage(damage, attackers, other.id, _shielded(other, roundf(hit * SPLASH_DAMAGE)), ship.id)
+
+
+## The damage left of a hit after the victim's shield (which wears a little).
+static func _shielded(victim: ShipData, hit: float) -> float:
+	var absorb := Equipment.shield_absorb(victim)
+	if absorb <= 0.0:
+		return hit
+	Equipment.wear_shield(victim)
+	return float(roundi(hit * (1.0 - absorb)))
 
 
 static func _add_damage(damage: Dictionary, attackers: Dictionary, victim_id: int, amount: float, attacker_id: int) -> void:
@@ -219,7 +260,7 @@ static func _damage_asteroid(galaxy: GalaxyData, ship: ShipData, amount: float, 
 
 
 ## A trader under fire runs for the nearest inhabited planet (whose defenses protect it).
-static func _flee_to_planet(galaxy: GalaxyData, ship: ShipData) -> void:
+static func flee_to_planet(galaxy: GalaxyData, ship: ShipData) -> void:
 	if ship.target_planet_id >= 0 or ship.hull_hp <= 0.0:
 		return # Already fleeing (or destroyed).
 	var planet := nearest_inhabited_planet(galaxy.get_system(ship.system_id), ship.position)
@@ -250,12 +291,15 @@ static func _destroy_npc(galaxy: GalaxyData, ship: ShipData, killer_id: int, eve
 	wreckage["salvage"] = int(wreckage.get("salvage", 0)) + salvage
 	system.add_loot(ship.position, wreckage)
 
+	# The Ranger Corps pays the bounty on pirates to rangers (the player or NPC rangers).
 	var bounty := 0
 	var killer := galaxy.get_ship(killer_id)
-	if killer != null and killer.is_player and ship.is_pirate():
+	if killer != null and ship.is_pirate() and (killer.is_player or killer.role == ShipData.ROLE_RANGER):
 		bounty = ship.bounty
 		killer.credits += bounty
+		Law.pirate_destroyed(killer, ship)
 	events.append({"type": EVENT_SHIP_DESTROYED, "ship_id": ship.id, "system_id": system.id, "killer_id": killer_id,
+		"killer_name": killer.name if killer != null else "", "killer_role": killer.role if killer != null else "",
 		"name": ship.name, "role": ship.role, "bounty": bounty, "position": ship.position})
 	_forget_ship_as_target(galaxy, ship.id)
 	galaxy.remove_ship(ship.id)

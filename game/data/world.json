@@ -1,5 +1,5 @@
 {
-	"_comment": "Economy and government types for inhabited planets (docs/MASTER_DESIGN.md sections 10-11). Government fields: 'illegal_goods' are contraband there; 'scan_chance' is the chance police scan you when you arrive; 'black_market_risk' is the chance a black-market deal gets busted; 'fine_rate' is the fine as a share of the contraband's value; 'prices' multiplies the price of some goods; 'fuel_price' is credits per unit of fuel.",
+	"_comment": "Economy and government types for inhabited planets (docs/MASTER_DESIGN.md sections 10-11). Government fields: 'illegal_goods' are contraband there; 'scan_chance' is the chance police scan you when you arrive; 'black_market_risk' is the chance a black-market deal gets busted; 'fine_rate' is the fine as a share of the contraband's value; 'prices' multiplies the price of some goods; 'fuel_price' is credits per unit of fuel; 'police' is how many police ships patrol a system with such a planet (the most of its planets; home systems get one more). Anarchies have no police and no law: crimes there only cost karma. 'law' (Milestone 5): fines and karma for crimes, fines shrink by 'fine_decay' per day (gone below 'min_fine'), pirates leave pilots with karma at or below 'pirate_friend_karma' alone, and 'reputation' names karma levels (the first entry whose 'min' you reach).",
 	"economies": [
 		{ "id": "agricultural", "name": "Agricultural", "weight": 35 },
 		{ "id": "industrial", "name": "Industrial", "weight": 35 },
@@ -7,19 +7,36 @@
 	],
 	"governments": [
 		{ "id": "anarchy", "name": "Anarchy", "weight": 10, "illegal_goods": [],
-			"scan_chance": 0.0, "black_market_risk": 0.0, "fine_rate": 0.0, "fuel_price": 14,
+			"scan_chance": 0.0, "black_market_risk": 0.0, "fine_rate": 0.0, "fuel_price": 14, "police": 0,
 			"prices": { "weapons": 1.15, "narcotics": 0.85 } },
 		{ "id": "dictatorship", "name": "Dictatorship", "weight": 20, "illegal_goods": ["weapons", "narcotics"],
-			"scan_chance": 0.6, "black_market_risk": 0.25, "fine_rate": 1.0, "fuel_price": 9,
+			"scan_chance": 0.6, "black_market_risk": 0.25, "fine_rate": 1.0, "fuel_price": 9, "police": 2,
 			"prices": {} },
 		{ "id": "monarchy", "name": "Monarchy", "weight": 20, "illegal_goods": ["narcotics"],
-			"scan_chance": 0.35, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 11,
+			"scan_chance": 0.35, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 11, "police": 1,
 			"prices": { "luxuries": 1.15 } },
 		{ "id": "republic", "name": "Republic", "weight": 25, "illegal_goods": ["narcotics"],
-			"scan_chance": 0.3, "black_market_risk": 0.12, "fine_rate": 0.5, "fuel_price": 10,
+			"scan_chance": 0.3, "black_market_risk": 0.12, "fine_rate": 0.5, "fuel_price": 10, "police": 1,
 			"prices": {} },
 		{ "id": "democracy", "name": "Democracy", "weight": 25, "illegal_goods": ["narcotics", "weapons"],
-			"scan_chance": 0.4, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 10,
+			"scan_chance": 0.4, "black_market_risk": 0.15, "fine_rate": 0.6, "fuel_price": 10, "police": 1,
 			"prices": { "luxuries": 1.3 } }
-	]
+	],
+	"law": {
+		"assault_fine": 250, "assault_karma": -2,
+		"murder_fine": 1500, "murder_karma": -12,
+		"extortion_fine": 400, "extortion_karma": -4,
+		"pirate_karma": 3,
+		"fine_decay": 0.02, "min_fine": 50,
+		"pirate_friend_karma": -30,
+		"reputation": [
+			{ "min": 60, "name": "Hero" },
+			{ "min": 30, "name": "Honored" },
+			{ "min": 10, "name": "Respected" },
+			{ "min": -4, "name": "Neutral" },
+			{ "min": -19, "name": "Shady" },
+			{ "min": -49, "name": "Criminal" },
+			{ "min": -1000000, "name": "Notorious" }
+		]
+	}
 }

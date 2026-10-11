@@ -22,7 +22,7 @@ func max_ammo() -> int:
 	return int(stats().get("ammo", 0))
 
 
-## "hull", "engine", "fuel_tank", "gripper" or "weapon".
+## "hull", "engine", "fuel_tank", "gripper", "radar", "shield" or "weapon".
 func kind() -> String:
 	return GameData.item_kind(type_id)
 

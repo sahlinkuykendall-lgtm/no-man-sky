@@ -6,6 +6,8 @@ extends RefCounted
 const DATA_DIR := "res://game/data/"
 
 static var _cache: Dictionary = {}
+static var _indexes: Dictionary = {} ## list name -> {id: entry}, for fast lookups by id.
+static var _item_kinds: Dictionary = {} ## item id -> kind ("hull", "engine", ...).
 
 
 static func load_json(file_name: String) -> Dictionary:
@@ -65,6 +67,14 @@ static func grippers() -> Array:
 	return load_json("equipment.json").get("grippers", [])
 
 
+static func shields() -> Array:
+	return load_json("equipment.json").get("shields", [])
+
+
+static func radars() -> Array:
+	return load_json("equipment.json").get("radars", [])
+
+
 static func weapons() -> Array:
 	return load_json("equipment.json").get("weapons", [])
 
@@ -86,56 +96,73 @@ static func find_by_id(entries: Array, id: String) -> Dictionary:
 	return {}
 
 
+## Like find_by_id for the list `key` in a data file, but remembers an index of the list
+## (these lookups happen very often).
+static func _indexed(file_name: String, key: String, id: String) -> Dictionary:
+	var index: Dictionary = _indexes.get(key, {})
+	if index.is_empty():
+		for entry: Dictionary in load_json(file_name).get(key, []):
+			index[entry.get("id")] = entry
+		_indexes[key] = index
+	return index.get(id, {})
+
+
 static func race(id: String) -> Dictionary:
-	return find_by_id(races(), id)
+	return _indexed("races.json", "races", id)
 
 
 static func star_type(id: String) -> Dictionary:
-	return find_by_id(star_types(), id)
+	return _indexed("star_types.json", "star_types", id)
 
 
 static func planet_type(id: String) -> Dictionary:
-	return find_by_id(planet_types(), id)
+	return _indexed("planet_types.json", "planet_types", id)
 
 
 static func economy(id: String) -> Dictionary:
-	return find_by_id(economies(), id)
+	return _indexed("world.json", "economies", id)
 
 
 static func government(id: String) -> Dictionary:
-	return find_by_id(governments(), id)
+	return _indexed("world.json", "governments", id)
 
 
 static func good(id: String) -> Dictionary:
-	return find_by_id(goods(), id)
+	return _indexed("goods.json", "goods", id)
 
 
 static func market_event(id: String) -> Dictionary:
-	return find_by_id(market_events(), id)
+	return _indexed("goods.json", "events", id)
 
 
 ## Every list of items in equipment.json, by kind.
 static func items_by_kind() -> Dictionary:
-	return {"hull": hulls(), "engine": engines(), "fuel_tank": fuel_tanks(), "gripper": grippers(), "weapon": weapons()}
+	return {"hull": hulls(), "engine": engines(), "fuel_tank": fuel_tanks(), "gripper": grippers(),
+		"radar": radars(), "shield": shields(), "weapon": weapons()}
 
 
 ## A hull or piece of equipment from equipment.json, whatever its kind.
 static func item_type(id: String) -> Dictionary:
-	var lists := items_by_kind()
-	for kind: String in lists:
-		var entry := find_by_id(lists[kind], id)
-		if not entry.is_empty():
-			return entry
-	return {}
+	if _item_kinds.is_empty():
+		_index_items()
+	return _indexes["items"].get(id, {})
 
 
-## "hull", "engine", "fuel_tank", "gripper", "weapon", or "" if the id is unknown.
+## "hull", "engine", "fuel_tank", "gripper", "radar", "shield", "weapon", or "" if unknown.
 static func item_kind(id: String) -> String:
+	if _item_kinds.is_empty():
+		_index_items()
+	return _item_kinds.get(id, "")
+
+
+static func _index_items() -> void:
+	var index := {}
 	var lists := items_by_kind()
 	for kind: String in lists:
-		if not find_by_id(lists[kind], id).is_empty():
-			return kind
-	return ""
+		for entry: Dictionary in lists[kind]:
+			index[entry.get("id")] = entry
+			_item_kinds[entry.get("id")] = kind
+	_indexes["items"] = index
 
 
 ## Picks a random entry, using each entry's "weight" field (default 1).

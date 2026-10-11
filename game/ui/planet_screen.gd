@@ -196,6 +196,9 @@ func _refresh() -> void:
 
 	_status_label.text = "Credits [b][color=#80ff99]%s[/color][/b]     Cargo %d / %d     Fuel %.1f / %.0f" % [
 		UiStyle.credits(ship.credits), ship.cargo_used(), ship.cargo_capacity, ship.fuel, ship.fuel_max]
+	var refusal := Law.refusal(GameState.galaxy, ship)
+	if refusal != "":
+		_status_label.text += "\n[color=#ff8a6b]%s[/color]" % refusal
 	var price := Economy.fuel_price(_planet)
 	var full_cost := ceili((ship.fuel_max - ship.fuel) * price - 0.0001)
 	_refuel_button.disabled = ship.fuel_max - ship.fuel < 0.05

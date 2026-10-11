@@ -34,6 +34,9 @@ const COLOR_JUMP_COURSE := Color(0.75, 0.5, 1.0, 0.9)
 const COLOR_SELECTION := Color(1.0, 0.9, 0.35)
 const COLOR_PLAYER := Color(0.7, 0.95, 1.0)
 const COLOR_PIRATE := Color(1.0, 0.3, 0.25)
+const COLOR_POLICE := Color(0.35, 0.6, 1.0)
+const COLOR_RANGER := Color(0.45, 1.0, 0.55)
+const COLOR_RADAR := Color(0.45, 0.8, 1.0, 0.25)
 const COLOR_TARGET := Color(1.0, 0.3, 0.25)
 const COLOR_RANGE := Color(1.0, 0.4, 0.35, 0.3)
 const COLOR_LOOT := Color(1.0, 0.85, 0.3)
@@ -62,6 +65,7 @@ var _days_label: Label3D
 var _selection_ring: MeshInstance3D
 var _target_ring: MeshInstance3D ## Red ring around what the player is attacking.
 var _range_circle: MeshInstance3D ## The player's longest weapon range.
+var _radar_circle: MeshInstance3D ## How far the player's radar sees other ships.
 var _shot_mesh: ImmediateMesh ## Laser beams, bullets and missiles of the current turn.
 var _selection_kind: String = ""
 var _selection_id: int = -1
@@ -199,6 +203,12 @@ func _build_course_visuals() -> void:
 	_range_circle.material_override = _line_material()
 	_range_circle.visible = false
 	add_child(_range_circle)
+
+	_radar_circle = MeshInstance3D.new()
+	_radar_circle.mesh = _circle_mesh(1.0, COLOR_RADAR, true)
+	_radar_circle.material_override = _line_material()
+	_radar_circle.visible = false
+	add_child(_radar_circle)
 
 	_shot_mesh = ImmediateMesh.new()
 	var shots := MeshInstance3D.new()
@@ -376,9 +386,15 @@ func _make_loot_node() -> Node3D:
 
 func _make_ship_node(ship: ShipData) -> Node3D:
 	var holder := Node3D.new()
+	# Pirates are red, police blue, rangers green, traders the color of their race.
 	var color := COLOR_PLAYER if ship.is_player else Color(GameData.race(ship.race_id).get("color", "#cccccc"))
-	if ship.is_pirate():
-		color = COLOR_PIRATE
+	match ship.role:
+		ShipData.ROLE_PIRATE:
+			color = COLOR_PIRATE
+		ShipData.ROLE_POLICE:
+			color = COLOR_POLICE
+		ShipData.ROLE_RANGER:
+			color = COLOR_RANGER
 	var length := 1.5 if ship.is_player else 1.0
 
 	var hull := MeshInstance3D.new()
@@ -412,8 +428,8 @@ func _make_ship_node(ship: ShipData) -> Node3D:
 
 	if ship.is_player:
 		_add_label(holder, "You", COLOR_PLAYER, Vector3.ZERO, 0.9)
-	elif ship.is_pirate():
-		_add_label(holder, ship.name, COLOR_PIRATE, Vector3.ZERO, 0.6)
+	elif ship.role != ShipData.ROLE_TRADER:
+		_add_label(holder, ship.name, color, Vector3.ZERO, 0.6)
 	return holder
 
 
@@ -565,6 +581,7 @@ func _apply_animation(t: float) -> void:
 		var node: Node3D = _ship_nodes[ship.id]
 		node.position = to_world(ship_position, 0.3)
 		node.rotation.y = heading_to_rotation(heading)
+		node.visible = _on_radar(ship)
 
 	for wreck: Dictionary in _wrecks.values():
 		(wreck["node"] as Node3D).position = to_world((wreck["from"] as Vector2).lerp(wreck["to"], t), 0.3)
@@ -706,6 +723,8 @@ func _update_shots() -> void:
 		if p < 0.0 or p > 1.0:
 			continue
 		var shooter := _ship_node(shot["ship_id"])
+		if shooter != null and not shooter.visible:
+			continue # Fights beyond your radar range are not shown.
 		var from := shooter.position if shooter != null else to_world(shot["from"], 0.3)
 		var target: Node3D = null
 		if shot["target_kind"] == Combat.TARGET_SHIP:
@@ -783,7 +802,7 @@ func _update_course() -> void:
 	var length := from.distance_to(to)
 	if length > 0.01:
 		var dash := maxf(_camera.size * 0.012, 0.2)
-		var steps := mini(int(length / dash), 400)
+		var steps := clampi(int(length / dash), 1, 400) # At least one dash, or the mesh is empty.
 		_course_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 		for i in range(0, steps, 2):
 			_course_mesh.surface_set_color(color)
@@ -810,7 +829,7 @@ func _update_selection_ring() -> void:
 	if _selection_kind == "planet" and _planet_nodes.has(_selection_id):
 		target = _planet_nodes[_selection_id]
 		size = GameState.current_system().get_planet(_selection_id).radius * WORLD_SCALE * 1.8
-	elif _selection_kind == "ship" and _ship_nodes.has(_selection_id):
+	elif _selection_kind == "ship" and _ship_nodes.has(_selection_id) and (_ship_nodes[_selection_id] as Node3D).visible:
 		target = _ship_nodes[_selection_id]
 		size = 1.2
 	elif _selection_kind == "asteroid" and _asteroid_nodes.has(_selection_id) and (_asteroid_nodes[_selection_id] as Node3D).visible:
@@ -831,13 +850,25 @@ func _update_selection_ring() -> void:
 		_selection_ring.scale = Vector3.ONE * size
 
 
-## The red ring around the player's target and the circle showing their weapon range.
+## Other ships only show up within the player's radar range (Equipment.on_radar).
+func _on_radar(ship: ShipData) -> bool:
+	var player := GameState.player_ship()
+	return player == null or Equipment.on_radar(player, ship)
+
+
+## The red ring around the player's target, the circle showing their weapon range and the
+## faint circle showing their radar range.
 func _update_combat_markers() -> void:
 	var ship := GameState.player_ship()
 	_target_ring.visible = false
 	_range_circle.visible = false
+	_radar_circle.visible = false
 	if ship == null or _showing_hyperspace or not _ship_nodes.has(ship.id):
 		return
+	var ship_node: Node3D = _ship_nodes[ship.id]
+	_radar_circle.visible = true
+	_radar_circle.position = Vector3(ship_node.position.x, 0.0, ship_node.position.z)
+	_radar_circle.scale = Vector3.ONE * Equipment.radar_range(ship)
 	var target: Node3D = null
 	var size := 1.4
 	if ship.target_kind == Combat.TARGET_SHIP:
@@ -958,7 +989,7 @@ func _on_left_click(screen_position: Vector2) -> void:
 	# Small things first (ships, containers, asteroids), then planets, then the star,
 	# else empty space.
 	for ship in GameState.galaxy.ships_in_system(_system_id):
-		if _ship_nodes.has(ship.id) and to_sim(_ship_nodes[ship.id].position).distance_to(point) < SHIP_PICK_RADIUS + pick_slack:
+		if _ship_nodes.has(ship.id) and _on_radar(ship) and to_sim(_ship_nodes[ship.id].position).distance_to(point) < SHIP_PICK_RADIUS + pick_slack:
 			if not ship.is_player:
 				EventBus.selection_changed.emit("ship", ship.id)
 				return

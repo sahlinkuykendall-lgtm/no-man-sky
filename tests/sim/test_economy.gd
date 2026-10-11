@@ -51,6 +51,14 @@ func test_buying_then_selling_straight_back_always_loses_money() -> void:
 
 func test_stock_recovers_towards_normal() -> void:
 	var galaxy := GalaxyGenerator.generate(12)
+	for ship in galaxy.ships.duplicate():
+		if not ship.is_player:
+			galaxy.remove_ship(ship.id) # NPC traders would buy and sell here too.
+	galaxy.ranger_limit = 0
+	for system in galaxy.systems:
+		system.pirate_limit = 0
+		system.trader_limit = 0
+		system.police_limit = 0
 	var planet := galaxy.get_system(galaxy.player_ship().system_id).get_planet(galaxy.player_ship().orbiting_planet_id)
 	var normal := Economy.normal_stock(planet, GameData.good("food"))
 	planet.market_stock["food"] = 0

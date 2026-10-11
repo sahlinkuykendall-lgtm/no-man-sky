@@ -1,11 +1,13 @@
 class_name Hud
 extends CanvasLayer
-## The in-space interface: status bar, info panel, message log, turn buttons,
-## galaxy map, planet (trade) screen and pause menu.
+## The in-space interface: status bar (with your reputation and the latest news), info
+## panel, message log, turn buttons, galaxy map, planet (trade) screen, hail window,
+## Ranger Corps board and pause menu.
 ##
 ## Keys: Space = End Turn, Shift+Space = Auto (fly until arrival), M = galaxy map,
 ## L = land on the planet you orbit (trade), T = attack / cease fire on the selected
-## pirate or asteroid, Esc = menu, F = center camera on ship.
+## ship or asteroid, H = hail the selected ship or planet, R = Ranger Corps board,
+## Esc = menu, F = center camera on ship.
 
 const MAX_LOG_LINES := 6
 ## Galactic news about market events reaches you from systems this close (parsecs).
@@ -13,9 +15,11 @@ const NEWS_RANGE := 40.0
 
 var _root: Control
 var _status_label: RichTextLabel
+var _news_label: RichTextLabel ## Second status line: reputation, wanted, latest headline.
 var _info_label: RichTextLabel
 var _action_button: Button ## "Attack", "Cease fire" or "Shoot" for the selected thing.
 var _action_order: Dictionary = {} ## The order the action button sends.
+var _hail_button: Button
 var _log_label: RichTextLabel
 var _log_lines: Array[String] = []
 var _end_turn_button: Button
@@ -24,6 +28,8 @@ var _land_button: Button
 var _hyperspace_label: Label
 var _galaxy_map: GalaxyMap
 var _planet_screen: PlanetScreen
+var _hail_window: HailWindow
+var _ranger_board: RangerBoard
 var _pause_menu: PanelContainer
 
 var _selection_kind: String = ""
@@ -44,6 +50,10 @@ func _ready() -> void:
 	_root.add_child(_galaxy_map)
 	_planet_screen = PlanetScreen.new()
 	_root.add_child(_planet_screen)
+	_hail_window = HailWindow.new()
+	_root.add_child(_hail_window)
+	_ranger_board = RangerBoard.new()
+	_root.add_child(_ranger_board)
 	_build_pause_menu()
 
 	EventBus.galaxy_loaded.connect(_on_galaxy_loaded)
@@ -65,8 +75,15 @@ func _build_status_bar() -> void:
 	panel.offset_right = -10
 	panel.offset_top = 8
 	_root.add_child(panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 2)
+	panel.add_child(column)
 	_status_label = _rich_label()
-	panel.add_child(_status_label)
+	column.add_child(_status_label)
+	_news_label = _rich_label()
+	_news_label.add_theme_font_size_override("normal_font_size", 13)
+	_news_label.add_theme_font_size_override("bold_font_size", 13)
+	column.add_child(_news_label)
 
 
 func _build_info_panel() -> void:
@@ -74,7 +91,7 @@ func _build_info_panel() -> void:
 	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	panel.offset_left = -300
 	panel.offset_right = -10
-	panel.offset_top = 64
+	panel.offset_top = 84
 	panel.custom_minimum_size = Vector2(290, 0)
 	_root.add_child(panel)
 	var column := VBoxContainer.new()
@@ -85,6 +102,10 @@ func _build_info_panel() -> void:
 	_action_button = UiStyle.make_button("", _on_action_pressed)
 	_action_button.visible = false
 	column.add_child(_action_button)
+	_hail_button = UiStyle.make_button("Hail (H)", _open_hail_window)
+	_hail_button.tooltip_text = "Talk to this ship or planet: ask for news or help, bargain or threaten"
+	_hail_button.visible = false
+	column.add_child(_hail_button)
 
 
 func _build_log() -> void:
@@ -105,7 +126,7 @@ func _build_log() -> void:
 func _build_turn_buttons() -> void:
 	var box := HBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	box.offset_left = -600
+	box.offset_left = -720
 	box.offset_right = -10
 	box.offset_top = -56
 	box.offset_bottom = -10
@@ -117,6 +138,9 @@ func _build_turn_buttons() -> void:
 	_land_button.tooltip_text = "Land on the planet you are orbiting to trade and refuel"
 	box.add_child(_land_button)
 	box.add_child(UiStyle.make_button("Galaxy Map (M)", _toggle_map, 130))
+	var board_button := UiStyle.make_button("Rangers (R)", _toggle_ranger_board, 110)
+	board_button.tooltip_text = "The Ranger Corps ranking, your reputation and the galactic news"
+	box.add_child(board_button)
 	_auto_button = UiStyle.make_button("Auto ▶▶", _toggle_auto, 100)
 	_auto_button.toggle_mode = true
 	_auto_button.tooltip_text = "Keep ending turns until you arrive (Shift+Space)"
@@ -208,6 +232,8 @@ func _on_turn_resolved(_day: int, events: Array[Dictionary]) -> void:
 			Combat.EVENT_SHIP_DESTROYED:
 				if event["killer_id"] == ship.id:
 					_report_event(event)
+				elif _was_targeting(events, ship, event["ship_id"]):
+					_add_message("%s was destroyed by %s." % [event["name"], event.get("killer_name", "someone")], "good")
 			_:
 				if event.get("ship_id") == ship.id:
 					_report_event(event)
@@ -224,6 +250,8 @@ func _report_shots(events: Array[Dictionary]) -> void:
 			names[event["ship_id"]] = event["name"]
 	var dealt := {} ## target name -> damage
 	var taken := {} ## attacker name -> damage
+	var blocked_by_them := 0 ## Damage their shields stopped.
+	var blocked_by_you := 0 ## Damage your shield stopped.
 	for event in events:
 		if event["type"] != Combat.EVENT_SHOT:
 			continue
@@ -232,19 +260,32 @@ func _report_shots(events: Array[Dictionary]) -> void:
 			if event["target_kind"] == Combat.TARGET_SHIP:
 				target_name = _ship_name(galaxy, event["target_id"], names)
 			dealt[target_name] = int(dealt.get(target_name, 0)) + int(event["damage"])
+			blocked_by_them += int(event.get("blocked", 0))
 		elif event["target_kind"] == Combat.TARGET_SHIP and event["target_id"] == ship.id:
 			var attacker_name := _ship_name(galaxy, event["ship_id"], names)
 			taken[attacker_name] = int(taken.get(attacker_name, 0)) + int(event["damage"])
+			blocked_by_you += int(event.get("blocked", 0))
 	var parts: Array[String] = []
 	for target_name: String in dealt:
 		parts.append("%s for %d" % [target_name, dealt[target_name]])
 	if not parts.is_empty():
-		_add_message("You hit %s." % ", ".join(parts), "info")
+		var their_shields := " (their shields stopped %d)" % blocked_by_them if blocked_by_them > 0 else ""
+		_add_message("You hit %s%s." % [", ".join(parts), their_shields], "info")
 	parts.clear()
 	for attacker_name: String in taken:
 		parts.append("%s hit you for %d" % [attacker_name, taken[attacker_name]])
 	if not parts.is_empty():
-		_add_message("%s. Hull %d / %d." % [", ".join(parts), roundi(ship.hull_hp), roundi(ship.hull_hp_max)], "warning")
+		var your_shield := " Your shield stopped %d." % blocked_by_you if blocked_by_you > 0 else ""
+		_add_message("%s.%s Hull %d / %d." % [", ".join(parts), your_shield, roundi(ship.hull_hp), roundi(ship.hull_hp_max)], "warning")
+
+
+## True if the player shot at that ship this turn (so they want to know who finished it).
+static func _was_targeting(events: Array[Dictionary], ship: ShipData, target_id: int) -> bool:
+	for event in events:
+		if event["type"] == Combat.EVENT_SHOT and event["ship_id"] == ship.id \
+				and event["target_kind"] == Combat.TARGET_SHIP and event["target_id"] == target_id:
+			return true
+	return false
 
 
 static func _ship_name(galaxy: GalaxyData, ship_id: int, names: Dictionary) -> String:
@@ -327,12 +368,23 @@ func _report_event(event: Dictionary) -> void:
 		Combat.EVENT_UNDER_ATTACK:
 			var attacker := galaxy.get_ship(event["attacker_id"])
 			var attacker_name := attacker.name if attacker != null else "A pirate"
-			_add_message("%s is coming for you! Fight back (select it, T) or flee to an inhabited planet." % attacker_name, "warning")
+			var advice := "Fight back (select it, T), hail it (H) or flee to an inhabited planet."
+			if attacker != null and attacker.role == ShipData.ROLE_POLICE:
+				advice = "The police are after you! Flee, fight back, or hail them (H) and offer a bribe."
+			_add_message("%s is coming for you! %s" % [attacker_name, advice], "warning")
 		Combat.EVENT_SHIP_DESTROYED:
 			var text := "You destroyed %s!" % event["name"]
 			if event["bounty"] > 0:
 				text += " The Ranger Corps pays a bounty of %s." % UiStyle.credits(event["bounty"])
 			_add_message(text + " Its wreck left a cargo container.", "good")
+		Law.EVENT_CRIME:
+			_add_message(_crime_text(event), "warning")
+		Law.EVENT_FINE_PAID:
+			_add_message("You paid your fine of %s. The %s will deal with you again." % [
+				UiStyle.credits(event["credits"]), GameData.race(event["race_id"]).get("name", "?")], "good")
+		Comms.EVENT_HAIL:
+			var reply := str(event["reply"]).replace("\n", " / ")
+			_add_message("%s: \"%s\"" % [_hail_target_name(galaxy, event), reply], "good" if event["accepted"] else "info")
 		Combat.EVENT_ASTEROID_DESTROYED:
 			_add_message("The asteroid broke up into %d minerals. Fly close to pick them up." % event["minerals"], "good")
 		Combat.EVENT_COLLECTED:
@@ -352,6 +404,29 @@ func _report_event(event: Dictionary) -> void:
 			_add_message(text + " Repair your hull at the shipyard.", "warning")
 		Shipyard.EVENT_EQUIPMENT_WORN:
 			_add_message("Your %s is worn out and losing power. Repair it at a shipyard." % str(Equipment.KIND_NAMES[event["kind"]]).to_lower(), "warning")
+
+
+## "You attacked the peaceful X. That's a crime! The Skarn fine you 250 cr." and similar.
+static func _crime_text(event: Dictionary) -> String:
+	var verbs := {Law.CRIME_ASSAULT: "You attacked", Law.CRIME_MURDER: "You destroyed", Law.CRIME_EXTORTION: "You robbed"}
+	var text := "%s the peaceful %s. That's a crime!" % [verbs.get(event["crime"], "You attacked"), event["victim_name"]]
+	if event["fine"] > 0:
+		var race_name: String = GameData.race(event["race_id"]).get("name", "?")
+		text += " The %s fine you %s" % [race_name, UiStyle.credits(event["fine"])]
+		if event["newly_wanted"]:
+			text += ". You are WANTED: their police will hunt you and their planets won't deal with you until you pay"
+		text += "."
+	else:
+		text += " Nobody enforces the law here, but your reputation suffers."
+	return text
+
+
+static func _hail_target_name(galaxy: GalaxyData, event: Dictionary) -> String:
+	if event["target_kind"] == Comms.TARGET_PLANET:
+		var planet := galaxy.get_system(galaxy.player_ship().system_id).get_planet(event["target_id"])
+		return planet.name if planet != null else "The planet"
+	var other := galaxy.get_ship(event["target_id"])
+	return other.name if other != null else "The ship"
 
 
 ## Galactic news about a market event, if it happened close enough to matter.
@@ -390,8 +465,11 @@ func _refresh() -> void:
 	_auto_button.set_pressed_no_signal(TurnManager.auto_advance)
 	_land_button.disabled = Trade.market_planet(galaxy, ship) == null or TurnManager.is_resolving
 	_status_label.text = _status_text(galaxy, ship)
+	_news_label.text = _news_line(galaxy, ship)
 	_info_label.text = _info_text(galaxy, ship)
 	_update_action_button(galaxy, ship)
+	_hail_button.visible = not _hail_target().is_empty()
+	_hail_button.disabled = TurnManager.is_resolving
 	_hyperspace_label.visible = ship.in_hyperspace
 	if ship.in_hyperspace:
 		_hyperspace_label.text = "IN HYPERSPACE\n→ %s\n%d day(s) remaining" % [galaxy.get_system(ship.jump_target_system_id).name, ship.jump_days_left]
@@ -410,6 +488,20 @@ func _status_text(galaxy: GalaxyData, ship: ShipData) -> String:
 	return "[b]Day %d[/b]    %s    [color=#80ff99]%s[/color]    Hull [color=%s]%d/%d[/color]    Cargo %d/%d    Fuel [color=%s]%.1f/%.0f[/color]    %s" % [
 		galaxy.day, location, UiStyle.credits(ship.credits), hull_color, roundi(ship.hull_hp), roundi(ship.hull_hp_max),
 		ship.cargo_used(), ship.cargo_capacity, fuel_color, ship.fuel, ship.fuel_max, _course_text(galaxy, ship)]
+
+
+## Your Ranger rank and reputation, any fines you owe, and the latest headline.
+func _news_line(galaxy: GalaxyData, ship: ShipData) -> String:
+	var rank := galaxy.ranger_ranking().find(ship) + 1
+	var text := "Ranger rank #%d    Reputation [b]%s[/b]" % [rank, Law.reputation(ship.karma)]
+	if not ship.wanted.is_empty():
+		var here := "" if ship.in_hyperspace else galaxy.get_system(ship.system_id).race_id
+		var color := "#ff6b5b" if ship.wanted.has(here) else "#ffbf59"
+		text += "    [color=%s]WANTED (fines %s)[/color]" % [color, UiStyle.credits(ship.total_fines())]
+	if not galaxy.news.is_empty():
+		var latest: Dictionary = galaxy.news[0]
+		text += "    [color=#9aa8c8]NEWS, day %d: %s[/color]" % [int(latest["day"]), latest["text"]]
+	return text
 
 
 func _course_text(galaxy: GalaxyData, ship: ShipData) -> String:
@@ -441,7 +533,7 @@ func _info_text(galaxy: GalaxyData, ship: ShipData) -> String:
 				return _planet_text(planet)
 		"ship":
 			var other := galaxy.get_ship(_selection_id)
-			if other and not other.in_hyperspace and other.system_id == ship.system_id:
+			if other and Equipment.on_radar(ship, other):
 				return _ship_text(galaxy, ship, other)
 		"asteroid":
 			var asteroid := system.get_asteroid(_selection_id)
@@ -454,7 +546,7 @@ func _info_text(galaxy: GalaxyData, ship: ShipData) -> String:
 		"star":
 			var star_type := GameData.star_type(system.star_type_id)
 			return "[font_size=18][b]%s[/b][/font_size]\n%s\nPlanets: %d" % [system.name, star_type.get("name", ""), system.planets.size()]
-	return "[font_size=18][b]Your ship[/b][/font_size]\n%s\nSpeed %.0f/day · Jump %.0f pc (%.0f pc/day)\n%s\n\n[color=#9aa8c8]Click a planet to fly to it. Land (L) to trade, buy gear and repair.\nClick a pirate (red) or an asteroid, then Attack (T).\nGalaxy Map (M) to jump to another system.[/color]" % [
+	return "[font_size=18][b]Your ship[/b][/font_size]\n%s\nSpeed %.0f/day · Jump %.0f pc (%.0f pc/day)\n%s\n\n[color=#9aa8c8]Click a planet to fly to it. Land (L) to trade, buy gear and repair.\nClick a pirate (red) or an asteroid, then Attack (T).\nClick a ship or planet, then Hail (H) to talk.\nGalaxy Map (M) to jump to another system.[/color]" % [
 		_equipment_text(ship), ship.speed, ship.jump_range, ship.jump_speed, _cargo_text(ship)]
 
 
@@ -485,6 +577,10 @@ func _ship_text(galaxy: GalaxyData, ship: ShipData, other: ShipData) -> String:
 		lines.append("[color=%s]%s[/color] %s" % [race.get("color", "#fff"), race.get("name", ""), other.role.capitalize()])
 	if other.hull != null:
 		lines.append("%s  ·  Hull %d / %d" % [other.hull.stats().get("name", "?"), roundi(other.hull_hp), roundi(other.hull_hp_max)])
+	if other.shield != null:
+		lines.append("%s (stops %d%% of damage)" % [other.shield.stats().get("name", "?"), roundi(Equipment.shield_absorb(other) * 100.0)])
+	if other.role == ShipData.ROLE_RANGER:
+		lines.append("Ranger rank #%d  ·  %d pts  ·  %d kills" % [galaxy.ranger_ranking().find(other) + 1, other.points, other.kills])
 	var weapon_names: Array[String] = []
 	for weapon in other.weapons:
 		weapon_names.append(str(weapon.stats().get("name", "?")))
@@ -494,10 +590,14 @@ func _ship_text(galaxy: GalaxyData, ship: ShipData, other: ShipData) -> String:
 	lines.append(_distance_text(ship, other.position))
 	if other.target_kind == Combat.TARGET_SHIP and other.target_id == ship.id:
 		lines.append("[color=#ff6b5b]It is attacking you![/color]")
+	elif other.target_kind == Combat.TARGET_SHIP and Combat.target_exists(galaxy, other):
+		lines.append("[color=#ffbf59]Fighting %s[/color]" % galaxy.get_ship(other.target_id).name)
+	if other.has_truce_with(ship.id):
+		lines.append("[color=#80ff99]Leaving you alone for %d more days[/color]" % int(other.truce[ship.id]))
 	if Combat.is_protected(galaxy, other):
 		lines.append("[color=#9aa8c8]Protected by the defenses of the planet it orbits.[/color]")
 	elif not other.is_pirate():
-		lines.append("[color=#9aa8c8]A peaceful ship. The Ranger Corps doesn't allow attacking it.[/color]")
+		lines.append("[color=#9aa8c8]A peaceful ship. Attacking it is a crime: a fine, worse karma and the police on your tail.[/color]")
 	return "\n".join(lines)
 
 
@@ -533,14 +633,14 @@ func _target_name(galaxy: GalaxyData, ship: ShipData) -> String:
 	return "an asteroid"
 
 
-## Shows Attack / Shoot / Cease fire for the selected pirate or asteroid.
+## Shows Attack / Shoot / Cease fire for the selected ship or asteroid.
 func _update_action_button(galaxy: GalaxyData, ship: ShipData) -> void:
 	_action_order = {}
 	var kind := ""
 	if not ship.in_hyperspace:
 		if _selection_kind == "ship":
 			var other := galaxy.get_ship(_selection_id)
-			if other != null and other.is_pirate() and not other.in_hyperspace and other.system_id == ship.system_id:
+			if other != null and other != ship and Equipment.on_radar(ship, other):
 				kind = Combat.TARGET_SHIP
 		elif _selection_kind == "asteroid":
 			var asteroid := galaxy.get_system(ship.system_id).get_asteroid(_selection_id)
@@ -551,7 +651,10 @@ func _update_action_button(galaxy: GalaxyData, ship: ShipData) -> void:
 		_action_button.text = "Cease fire (T)"
 	elif kind != "":
 		_action_order = {"type": "attack", "target_kind": kind, "target_id": _selection_id}
-		_action_button.text = "Attack (T)" if kind == Combat.TARGET_SHIP else "Shoot asteroid (T)"
+		_action_button.text = "Shoot asteroid (T)"
+		if kind == Combat.TARGET_SHIP:
+			var peaceful := not galaxy.get_ship(_selection_id).is_pirate()
+			_action_button.text = "Attack: a crime! (T)" if peaceful else "Attack (T)"
 	_action_button.visible = not _action_order.is_empty()
 	_action_button.disabled = TurnManager.is_resolving
 
@@ -627,7 +730,7 @@ func _market_summary(planet: PlanetData) -> String:
 # --- Input --------------------------------------------------------------------
 
 func _toggle_map() -> void:
-	if _planet_screen.is_open():
+	if _planet_screen.is_open() or _hail_window.is_open() or _ranger_board.is_open():
 		return
 	if _galaxy_map.visible:
 		_galaxy_map.close()
@@ -636,11 +739,55 @@ func _toggle_map() -> void:
 		_galaxy_map.open()
 
 
+## The {"kind", "id"} the Hail button talks to: the selected ship (on radar) or
+## inhabited planet. Empty if there's nobody to hail.
+func _hail_target() -> Dictionary:
+	if not GameState.has_game():
+		return {}
+	var galaxy := GameState.galaxy
+	var ship := GameState.player_ship()
+	if ship.in_hyperspace:
+		return {}
+	if _selection_kind == "ship":
+		var other := galaxy.get_ship(_selection_id)
+		if other != null and other != ship and Equipment.on_radar(ship, other):
+			return {"kind": Comms.TARGET_SHIP, "id": _selection_id}
+	elif _selection_kind == "planet":
+		var planet := galaxy.get_system(ship.system_id).get_planet(_selection_id)
+		if planet != null and planet.inhabited:
+			return {"kind": Comms.TARGET_PLANET, "id": _selection_id}
+	return {}
+
+
+func _open_hail_window() -> void:
+	if _any_window_open() or TurnManager.is_resolving:
+		return
+	var target := _hail_target()
+	if target.is_empty():
+		_add_message("Select a ship on your radar or an inhabited planet first, then hail it (H).", "warning")
+		return
+	TurnManager.set_auto_advance(false)
+	_hail_window.open(target["kind"], target["id"])
+
+
+func _toggle_ranger_board() -> void:
+	if _ranger_board.is_open():
+		_ranger_board.close()
+	elif not _any_window_open():
+		_ranger_board.open()
+
+
+## True while a full-screen window (map, planet, hail, board or menu) is open.
+func _any_window_open() -> bool:
+	return _galaxy_map.visible or _pause_menu.visible or _planet_screen.is_open() \
+			or _hail_window.is_open() or _ranger_board.is_open()
+
+
 func _toggle_planet_screen() -> void:
 	if _planet_screen.is_open():
 		_planet_screen.close()
 		return
-	if _galaxy_map.visible or _pause_menu.visible or TurnManager.is_resolving:
+	if _any_window_open() or TurnManager.is_resolving:
 		return
 	var planet := Trade.market_planet(GameState.galaxy, GameState.player_ship())
 	if planet == null:
@@ -660,7 +807,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	match key.keycode:
 		KEY_SPACE:
-			if _galaxy_map.visible or _pause_menu.visible or _planet_screen.is_open():
+			if _any_window_open():
 				return
 			if key.shift_pressed:
 				_toggle_auto()
@@ -674,12 +821,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_planet_screen()
 			get_viewport().set_input_as_handled()
 		KEY_T:
-			if not (_galaxy_map.visible or _pause_menu.visible or _planet_screen.is_open()):
+			if not _any_window_open():
 				_on_action_pressed()
+			get_viewport().set_input_as_handled()
+		KEY_H:
+			_open_hail_window()
+			get_viewport().set_input_as_handled()
+		KEY_R:
+			_toggle_ranger_board()
 			get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
 			if _planet_screen.is_open():
 				_planet_screen.close()
+			elif _hail_window.is_open():
+				_hail_window.close()
+			elif _ranger_board.is_open():
+				_ranger_board.close()
 			elif _galaxy_map.visible:
 				_galaxy_map.close()
 			else:

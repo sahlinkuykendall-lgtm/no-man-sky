@@ -1,22 +1,55 @@
 {
-	"_comment": "NPC ships (docs/MASTER_DESIGN.md sections 6 and 12). Each loadout lists the hull, engine and weapons (ids from equipment.json); the race that built them is the ship's race. Pirates: 'min_danger' (0-1) is how far from the races' home systems a loadout starts to appear ('danger' = distance to the nearest home system / danger_distance), 'hull_hp' is the share of armor they start with (pirates are battle-worn), 'bounty' is what the Ranger Corps pays for destroying one, 'cargo' is [min, max] units of goods they carry (part of it is left in the wreck, plus salvage). Traders: 'cargo' is [min, max] units of goods on board.",
+	"_comment": "NPC ships (docs/MASTER_DESIGN.md sections 6, 7 and 12). Each loadout lists the hull, engine, weapons and optional 'shield' and 'radar' (ids from equipment.json; ships without a radar get a basic one); the race that built them is the ship's race. Pirates: 'min_danger' (0-1) is how far from the races' home systems a loadout starts to appear ('danger' = distance to the nearest home system / danger_distance), 'hull_hp' is the share of armor they start with (pirates are battle-worn), 'bounty' is what the Ranger Corps pays for destroying one, 'cargo' is [min, max] units of goods they carry (part of it is left in the wreck, plus salvage). Traders: 'cargo' is [min, max] units on board and 'credits' [min, max] their trading money. Police guard the planets of systems with a government (how many: 'police' in world.json), patrolling within 'police_guard_distance' of them, and attack pirates that come within 'police_engage_distance' of a planet (wanted pilots anywhere in the system). Pirates come back with 'pirate_respawn_chance' per day, other ships with 'respawn_chance'. Rangers roam the galaxy hunting pirates ('ranger_count' of them).",
 	"danger_distance": 30.0,
-	"detection_range": 500.0,
 	"give_up_range": 900.0,
 	"respawn_chance": 0.04,
+	"pirate_respawn_chance": 0.1,
+	"police_guard_distance": 250.0,
+	"police_engage_distance": 300.0,
+	"ranger_count": 10,
+	"ranger_repair_below": 0.5,
+	"points_per_bounty": 0.1,
 	"pirates": [
 		{ "id": "raider", "name": "Raider", "weight": 6, "min_danger": 0.0,
-			"hull": "courier", "engine": "pulse_drive", "weapons": ["pulse_laser"],
+			"hull": "courier", "engine": "pulse_drive", "weapons": ["pulse_laser"], "radar": "basic_radar",
 			"hull_hp": 0.6, "bounty": 350, "cargo": [0, 8] },
 		{ "id": "marauder", "name": "Marauder", "weight": 3, "min_danger": 0.45,
-			"hull": "fighter", "engine": "pulse_drive", "weapons": ["pulse_laser", "scatter_cannon"],
+			"hull": "fighter", "engine": "pulse_drive", "weapons": ["pulse_laser", "scatter_cannon"], "radar": "basic_radar",
 			"hull_hp": 0.6, "bounty": 900, "cargo": [0, 12] },
 		{ "id": "warlord", "name": "Warlord", "weight": 1, "min_danger": 0.75,
 			"hull": "heavy_fighter", "engine": "arc_drive", "weapons": ["beam_lance", "scatter_cannon", "dart_launcher"],
+			"shield": "deflector_shield", "radar": "long_radar",
 			"hull_hp": 0.8, "bounty": 2200, "cargo": [5, 20] }
 	],
 	"traders": [
 		{ "id": "hauler", "name": "trader", "weight": 1,
-			"hull": "freighter", "engine": "spark_drive", "weapons": [], "cargo": [10, 60] }
-	]
+			"hull": "freighter", "engine": "spark_drive", "weapons": [], "radar": "basic_radar",
+			"cargo": [10, 60], "credits": [1500, 4000] }
+	],
+	"police": [
+		{ "id": "patrol", "name": "Patrol", "weight": 3,
+			"hull": "fighter", "engine": "pulse_drive", "weapons": ["pulse_laser", "scatter_cannon"],
+			"shield": "deflector_shield", "radar": "basic_radar" },
+		{ "id": "enforcer", "name": "Enforcer", "weight": 1,
+			"hull": "heavy_fighter", "engine": "arc_drive", "weapons": ["beam_lance", "scatter_cannon"],
+			"shield": "barrier_shield", "radar": "long_radar" }
+	],
+	"rangers": [
+		{ "id": "rookie", "weight": 3,
+			"hull": "fighter", "engine": "pulse_drive", "weapons": ["pulse_laser", "scatter_cannon"],
+			"shield": "deflector_shield", "radar": "basic_radar", "credits": [1000, 3000] },
+		{ "id": "veteran", "weight": 1,
+			"hull": "heavy_fighter", "engine": "arc_drive", "weapons": ["beam_lance", "scatter_cannon", "dart_launcher"],
+			"shield": "barrier_shield", "radar": "long_radar", "credits": [4000, 9000] }
+	],
+	"_comms_comment": "Hailing (game/sim/comms.gd). A bribe costs 'bribe_base' plus 'bribe_share' of your credits. Bribed, scared-off or paid-off ships leave you alone for 'truce_days'. A threat works when your fighting strength beats theirs times 'threat_ratio' times (0.5 + their race's courage). 'demand_share' and 'surrender_share' are the share of the hold handed over. Police and rangers only help against pirates within 'help_range' of them.",
+	"comms": {
+		"bribe_base": 200,
+		"bribe_share": 0.1,
+		"truce_days": 6,
+		"threat_ratio": 1.5,
+		"demand_share": 0.5,
+		"surrender_share": 0.5,
+		"help_range": 1200.0
+	}
 }

@@ -20,7 +20,7 @@ func test_starting_ship() -> void:
 	assert_almost_eq(ship.speed, 170.0, 0.001)
 	assert_almost_eq(ship.jump_range, 20.0, 0.001)
 	assert_almost_eq(ship.fuel, 30.0, 0.001)
-	assert_eq(ship.cargo_capacity, 90 - 12 - 8 - 3 - 5, "hull size minus the weight of the engine, tank, gripper and laser")
+	assert_eq(ship.cargo_capacity, 90 - 12 - 8 - 3 - 2 - 5, "hull size minus the weight of the engine, tank, gripper, radar and laser")
 	assert_eq(ship.gripper.type_id, Equipment.STARTING_GRIPPER)
 	assert_eq(ship.weapons.size(), 1)
 	assert_almost_eq(ship.hull_hp, ship.hull_hp_max, 0.001)
@@ -90,7 +90,7 @@ func test_buying_an_engine_trades_in_the_old_one() -> void:
 	assert_eq(ship.engine.type_id, "arc_drive")
 	assert_eq(ship.credits, 100000 - expected_cost)
 	assert_almost_eq(ship.speed, 235.0, 0.001)
-	assert_eq(ship.cargo_capacity, 90 - 18 - 8 - 3 - 5, "the heavier engine takes cargo space")
+	assert_eq(ship.cargo_capacity, 90 - 18 - 8 - 3 - 2 - 5, "the heavier engine takes cargo space")
 	assert_eq(events[0]["type"], Shipyard.EVENT_BOUGHT_ITEM)
 	assert_ne(Shipyard.buy_item(galaxy, ship, "arc_drive", []), "", "can't buy the same item twice")
 
@@ -102,7 +102,7 @@ func test_buying_a_hull_keeps_the_equipment() -> void:
 	assert_eq(Shipyard.buy_item(galaxy, ship, "freighter", []), "")
 	assert_eq(ship.hull.type_id, "freighter")
 	assert_eq(ship.engine.type_id, Equipment.STARTING_ENGINE)
-	assert_eq(ship.cargo_capacity, 180 - 12 - 8 - 3 - 5)
+	assert_eq(ship.cargo_capacity, 180 - 12 - 8 - 3 - 2 - 5)
 	assert_almost_eq(ship.hull_hp, ship.hull_hp_max, 0.001, "a new hull is undamaged")
 
 

@@ -9,9 +9,11 @@ func _galaxy() -> GalaxyData:
 	for ship in galaxy.ships.duplicate():
 		if not ship.is_player:
 			galaxy.remove_ship(ship.id)
+	galaxy.ranger_limit = 0 # No newcomers either.
 	for system in galaxy.systems:
-		system.pirate_limit = 0 # No newcomers either.
+		system.pirate_limit = 0
 		system.trader_limit = 0
+		system.police_limit = 0
 	var planet := Trade.market_planet(galaxy, galaxy.player_ship())
 	planet.race_id = "human"
 	planet.tech_level = 8
@@ -187,8 +189,6 @@ func test_traders_flee_to_a_planet() -> void:
 	_attack(galaxy, pirate, trader)
 	Combat.resolve(galaxy, [])
 	assert_true(trader.target_planet_id >= 0, "the trader should run for a planet")
-	assert_ne(TurnResolver.apply_order(galaxy, ship, {"type": "attack", "target_kind": "ship", "target_id": trader.id}), "",
-		"rangers may not attack peaceful ships")
 
 
 func test_no_weapons_no_attack() -> void:

@@ -19,7 +19,11 @@ const EVENT_ARRIVED_POINT := "arrived_point"
 const EVENT_ENTERED_HYPERSPACE := "entered_hyperspace"
 const EVENT_ARRIVED_SYSTEM := "arrived_system"
 const EVENT_JUMP_FAILED := "jump_failed"
-# Trading, market, shipyard and combat events are listed in Trade, Economy, Shipyard and Combat.
+# Trading, market, shipyard, combat, law and comms events are listed in Trade, Economy,
+# Shipyard, Combat, Law and Comms.
+
+## Orders that need a planet's goodwill (refused while its race wants you).
+const SERVICE_ORDERS: Array[String] = ["buy", "sell", "refuel", "buy_equipment", "repair", "sell_weapon"]
 
 
 ## Gives a ship a new order. Returns "" on success, or a message explaining why not.
@@ -36,11 +40,19 @@ const EVENT_JUMP_FAILED := "jump_failed"
 ##         {"type": "repair"}
 ##         {"type": "attack", "target_kind": "ship" or "asteroid", "target_id": int}
 ##         {"type": "cease_fire"}
+##         {"type": "hail", "target_kind": "ship" or "planet", "target_id": int, "option": String} (see Comms)
 static func apply_order(galaxy: GalaxyData, ship: ShipData, order: Dictionary, events: Array[Dictionary] = []) -> String:
 	if ship.in_hyperspace:
 		return "Can't change course while in hyperspace."
 	var system := galaxy.get_system(ship.system_id)
-	match order.get("type", ""):
+	var order_type: String = order.get("type", "")
+	if order_type in SERVICE_ORDERS:
+		var refusal := Law.refusal(galaxy, ship) # Planets don't deal with pilots their race wants.
+		if refusal != "":
+			return refusal
+	match order_type:
+		"hail":
+			return Comms.hail(galaxy, ship, str(order.get("target_kind", "")), int(order.get("target_id", -1)), str(order.get("option", "")), events)
 		"buy":
 			return Trade.buy(galaxy, ship, str(order.get("good_id", "")), int(order.get("quantity", 0)), events)
 		"sell":
@@ -110,8 +122,6 @@ static func _order_attack(galaxy: GalaxyData, ship: ShipData, target_kind: Strin
 			var other := galaxy.get_ship(target_id)
 			if other == null or other == ship or other.in_hyperspace or other.system_id != ship.system_id:
 				return "That ship isn't here."
-			if not ship.is_pirate() and not other.is_pirate():
-				return "The Ranger Corps doesn't allow attacks on peaceful ships."
 			if Combat.is_protected(galaxy, other):
 				return "%s is protected by the defenses of the planet it orbits." % other.name
 		Combat.TARGET_ASTEROID:
@@ -137,6 +147,7 @@ static func resolve_turn(galaxy: GalaxyData) -> Array[Dictionary]:
 			planet.advance(1)
 	Combat.daily_upkeep(galaxy)
 	Economy.daily_update(galaxy, events)
+	Law.daily(galaxy)
 	for ship in galaxy.ships:
 		if not ship.is_player:
 			NpcBrain.think(galaxy, ship, events)
@@ -144,6 +155,7 @@ static func resolve_turn(galaxy: GalaxyData) -> Array[Dictionary]:
 		_resolve_ship(galaxy, ship, events)
 	Combat.resolve(galaxy, events) # Everyone has moved: now the weapons fire.
 	NpcSpawner.daily(galaxy)
+	News.record(galaxy, events)
 	return events
 
 
@@ -287,8 +299,15 @@ static func _wear(ship: ShipData, use: String, events: Array[Dictionary]) -> voi
 		events.append({"type": Shipyard.EVENT_EQUIPMENT_WORN, "ship_id": ship.id, "kind": kind})
 
 
-## NPC ships refuel for free at inhabited planets (they have no money yet; Milestone 5
-## gives them real trading). Players buy fuel with the "refuel" order.
+## NPC ships refuel for free at inhabited planets, and police and rangers are repaired
+## there too (to keep NPCs simple). Players buy fuel and repairs with orders.
 static func _service_at_planet(ship: ShipData, planet: PlanetData) -> void:
-	if not ship.is_player and planet.inhabited and ship.fuel < ship.fuel_max:
-		ship.fuel = ship.fuel_max
+	if ship.is_player or not planet.inhabited or Law.is_wanted_by(ship, planet.race_id):
+		return
+	ship.fuel = ship.fuel_max
+	if ship.is_lawful_fighter() and Equipment.total_repair_cost(ship) > 0:
+		ship.hull_hp = ship.hull_hp_max
+		for item in ship.equipment():
+			item.condition = 100.0
+			item.ammo = item.max_ammo()
+		Equipment.apply_stats(ship)
